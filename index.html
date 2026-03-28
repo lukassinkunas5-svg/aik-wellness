@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.5/babel.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:#f0f3f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
@@ -506,7 +506,7 @@ function Dashboard({subs,players,onExport,onPlayersUpdate}) {
           <div style={{fontWeight:800,color:C.navy,marginBottom:10}}>{s.player}</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:s.comments?10:0}}>
             {s.fatigue<=2&&<Tag col={C.red}>⚡ Low energy ({s.fatigue}/5)</Tag>}
-            {s.sleepQuality<=2&&<Tag col={C.red}>😴 Poor sleep ({s.sleepQuality}/5){s.hoursSlept?` · ${s.hoursSlept}h`:""}</Tag>}
+            {s.sleepQuality<=2&&<Tag col={C.red}>{"😴 Poor sleep (" + s.sleepQuality + "/5)" + (s.hoursSlept ? " · " + s.hoursSlept + "h" : "")}</Tag>}
             {s.soreness<=2&&<Tag col={C.red}>💪 High soreness ({s.soreness}/5)</Tag>}
             {s.appetite<=2&&<Tag col={C.amber}>🍽 Poor appetite ({s.appetite}/5)</Tag>}
             {pain&&<Tag col={C.red}>⚠️ {pain}</Tag>}
