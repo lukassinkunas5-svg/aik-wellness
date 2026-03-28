@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>AIK - Wellness Check-in</title>
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -10,10 +10,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.5/babel.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0f1f3d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
-    select,input,textarea,button{font-family:inherit}
-    .slide-in{animation:slideIn .25s ease}
-    @keyframes slideIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    html,body{height:100%;background:#f0f3f8}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-tap-highlight-color:transparent}
+    select,input,textarea,button{font-family:inherit;-webkit-appearance:none}
+    .fade{animation:fadeUp .22s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
   </style>
 </head>
 <body>
@@ -22,10 +23,11 @@
 var useState = React.useState;
 var useEffect = React.useEffect;
 
+// ── CONFIG ────────────────────────────────────────────────
 var PIN = "1234";
 var SHEET_URL = "https://script.google.com/macros/s/AKfycbxrdFNChgE1qdk-KDpnuUqvZwqxLr7PBByFFH57OhBGRJdGuEDqKeMybX2XDqPVJw08Rw/exec";
-var STORAGE_KEY = "aik-wellness-players";
-var SUBS_KEY = "aik-wellness-subs";
+var PLAYERS_KEY = "aik-wellness-players";
+var SUBS_KEY    = "aik-wellness-subs";
 
 var DEFAULT_PLAYERS = [
   "Abdihakim Ali","Adrian Helm","Ahmad Faqa","Amel Mujanic","Andreas Redkin",
@@ -37,17 +39,19 @@ var DEFAULT_PLAYERS = [
   "Victor Andersson","Yannick Geiger","Zadok Yohanna"
 ];
 
-var PAIRED   = ["Shoulder","Upper Arm","Elbow","Forearm","Wrist / Hand","Hip / Groin","Quad","Hamstring","Knee","Calf","Shin","Ankle","Foot"];
-var CENTRAL  = ["Head","Neck","Upper Back","Lower Back","Chest","Abdomen"];
-var ILLNESS  = ["Cold / Flu","Sore Throat","Stomach / GI","Fever","Fatigue / Low energy","Allergy","Other"];
-var PAIN_T   = ["Sharp","Dull","Aching","Tightness","Burning","Other"];
-var HOURS    = ["<5","5","5.5","6","6.5","7","7.5","8","8.5","9","9+"];
+var PAIRED  = ["Shoulder","Upper Arm","Elbow","Forearm","Wrist / Hand","Hip / Groin","Quad","Hamstring","Knee","Calf","Shin","Ankle","Foot"];
+var CENTRAL = ["Head","Neck","Upper Back","Lower Back","Chest","Abdomen"];
+var ILLNESS = ["Cold / Flu","Sore Throat","Stomach / GI","Fever","Fatigue / Low energy","Allergy","Other"];
+var PAIN_T  = ["Sharp","Dull","Aching","Tightness","Burning","Other"];
+var HOURS   = ["<5","5","5.5","6","6.5","7","7.5","8","8.5","9","9+"];
 
-var navy="#0f1f3d", navyMid="#1a3260", yellow="#FFE135", goldLight="#c9a84c", gold="#8B7340";
-var white="#ffffff", border="#1e3a6e", muted="#7b93bc", faint="#162d52", cardBg="#132040";
-var red="#ef4444", amber="#f59e0b", green="#22c55e";
+// ── COLOURS ───────────────────────────────────────────────
+var navy="#0f1f3d", yellow="#FFE135", gold="#8B7340", goldLight="#c9a84c";
+var bg="#f0f3f8", white="#ffffff", border="#dce3ef", muted="#64748b", faint="#f4f6fb";
+var red="#dc2626", amber="#d97706", green="#16a34a";
 var DISP = "'Oswald','Impact',sans-serif";
 
+// ── HELPERS ───────────────────────────────────────────────
 function scoreCol(v){ return v>=4?green:v===3?amber:red; }
 
 function isFlagged(s){
@@ -55,8 +59,8 @@ function isFlagged(s){
   return s.fatigue<=2||s.sleepQuality<=2||s.soreness<=2||s.appetite<=2||pd.hasPain||pd.illness||s.readyToTrain==="no";
 }
 
-function avg(subs,key){
-  if(!subs.length) return "0";
+function avgVal(subs,key){
+  if(!subs.length) return "—";
   return (subs.reduce(function(a,s){return a+s[key];},0)/subs.length).toFixed(1);
 }
 
@@ -67,63 +71,87 @@ function nowTime(){
   return new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
 }
 
-function loadPlayers(){
-  try{var s=localStorage.getItem(STORAGE_KEY);return s?JSON.parse(s):DEFAULT_PLAYERS;}
-  catch(e){return DEFAULT_PLAYERS;}
+function loadLS(key,def){
+  try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}
+  catch(e){return def;}
 }
-function savePlayers(p){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(p));}catch(e){}}
-
-function loadSubs(){
-  try{var s=localStorage.getItem(SUBS_KEY);return s?JSON.parse(s):[];}
-  catch(e){return[];}
+function saveLS(key,val){
+  try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}
 }
-function saveSubs(s){try{localStorage.setItem(SUBS_KEY,JSON.stringify(s));}catch(e){}}
 
 function sendToSheet(sub){
   if(!SHEET_URL) return;
   var pd=sub.painData||{};
   var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
-  fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({player:sub.player,timestamp:sub.timestamp,fatigue:sub.fatigue,
-      sleepQuality:sub.sleepQuality,hoursSlept:sub.hoursSlept||"",appetite:sub.appetite,
-      soreness:sub.soreness,pain:pd.hasPain?"Yes":"No",painSide:pd.side||"",painAreas:areas,
-      painType:(pd.painType||[]).join("; "),illness:pd.illness?"Yes":"No",
-      illnessTypes:(pd.illnessTypes||[]).join("; "),readyToTrain:sub.readyToTrain,comments:sub.comments||""
+  fetch(SHEET_URL,{
+    method:"POST",mode:"no-cors",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      player:sub.player,timestamp:sub.timestamp,
+      fatigue:sub.fatigue,sleepQuality:sub.sleepQuality,hoursSlept:sub.hoursSlept||"",
+      appetite:sub.appetite,soreness:sub.soreness,
+      pain:pd.hasPain?"Yes":"No",painSide:pd.side||"",
+      painAreas:areas,painType:(pd.painType||[]).join("; "),
+      illness:pd.illness?"Yes":"No",illnessTypes:(pd.illnessTypes||[]).join("; "),
+      readyToTrain:sub.readyToTrain,comments:sub.comments||""
     })
   }).catch(function(){});
 }
 
-// ── UI Primitives ─────────────────────────────────────────
-function Btn(props){
+// ── PRIMITIVES ────────────────────────────────────────────
+function ProgressBar(props){
+  var pct=Math.round((props.current/props.total)*100);
   return (
-    <button onClick={props.onClick} disabled={props.disabled} style={Object.assign({
-      width:"100%",padding:"16px",borderRadius:12,border:"none",
-      fontFamily:DISP,fontSize:18,fontWeight:600,letterSpacing:1,
-      cursor:props.disabled?"default":"pointer",transition:"all .15s"
-    },props.style)}>{props.children}</button>
+    <div style={{marginBottom:24}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:muted,marginBottom:8,fontWeight:600}}>
+        <span style={{color:navy}}>{props.label}</span>
+        <span>{pct+"%"}</span>
+      </div>
+      <div style={{background:border,borderRadius:99,height:6,overflow:"hidden"}}>
+        <div style={{background:navy,height:6,borderRadius:99,width:pct+"%",transition:"width .35s ease"}}/>
+      </div>
+    </div>
+  );
+}
+
+function Card(props){
+  return (
+    <div className="fade" style={{background:white,borderRadius:20,padding:"26px 20px",
+      boxShadow:"0 2px 16px rgba(15,31,61,0.10)",marginBottom:16}}>
+      {props.children}
+    </div>
+  );
+}
+
+function QTitle(props){
+  return (
+    <div style={{marginBottom:20}}>
+      <div style={{fontSize:11,fontWeight:700,color:muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{props.sub}</div>
+      <div style={{fontSize:20,fontWeight:700,color:navy,lineHeight:1.35}}>{props.title}</div>
+    </div>
   );
 }
 
 function ScaleRow(props){
-  var value=props.value,onChange=props.onChange;
   return (
     <div>
-      <div style={{display:"flex",gap:10,marginBottom:8}}>
+      <div style={{display:"flex",gap:8}}>
         {[1,2,3,4,5].map(function(v){
-          var col=scoreCol(v),sel=value===v;
+          var col=scoreCol(v),sel=props.value===v;
           return (
-            <button key={v} onClick={function(){onChange(v);}} style={{
-              flex:1,paddingTop:"100%",position:"relative",borderRadius:12,
-              border:"2px solid "+(sel?col:"#1e3a6e"),
-              background:sel?col:faint,cursor:"pointer"
+            <button key={v} onClick={function(){props.onChange(v);}} style={{
+              flex:1,paddingTop:"100%",position:"relative",borderRadius:14,
+              border:"2px solid "+(sel?col:border),
+              background:sel?col:faint,cursor:"pointer",transition:"all .12s"
             }}>
-              <span style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
-                fontWeight:800,fontSize:22,color:sel?"#fff":muted}}>{v}</span>
+              <span style={{position:"absolute",top:"50%",left:"50%",
+                transform:"translate(-50%,-50%)",fontWeight:800,fontSize:20,
+                color:sel?"#fff":muted}}>{v}</span>
             </button>
           );
         })}
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:muted}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:11,color:muted}}>
         <span>{"1 — "+props.lo}</span><span>{"5 — "+props.hi}</span>
       </div>
     </div>
@@ -131,17 +159,16 @@ function ScaleRow(props){
 }
 
 function ChoiceRow(props){
-  var value=props.value,onChange=props.onChange,options=props.options;
   return (
     <div style={{display:"flex",gap:10}}>
-      {options.map(function(opt){
-        var v=opt[0],label=opt[1],col=opt[2],sel=value===v;
+      {props.options.map(function(opt){
+        var v=opt[0],label=opt[1],col=opt[2],sel=props.value===v;
         return (
-          <button key={v} onClick={function(){onChange(v);}} style={{
-            flex:1,padding:"16px 8px",borderRadius:12,
-            border:"2px solid "+(sel?col:"#1e3a6e"),
+          <button key={v} onClick={function(){props.onChange(v);}} style={{
+            flex:1,padding:"18px 8px",borderRadius:14,
+            border:"2px solid "+(sel?col:border),
             background:sel?col:faint,
-            color:sel?"#fff":muted,fontWeight:700,fontSize:14,cursor:"pointer"
+            color:sel?"#fff":muted,fontWeight:700,fontSize:15,cursor:"pointer",transition:"all .12s"
           }}>{label}</button>
         );
       })}
@@ -150,229 +177,196 @@ function ChoiceRow(props){
 }
 
 function Chip(props){
-  var sel=props.selected,col=props.color||yellow;
+  var sel=props.selected,col=props.color||navy;
   return (
     <button onClick={props.onClick} style={{
-      padding:"8px 14px",borderRadius:20,
-      border:"1.5px solid "+(sel?col:"#1e3a6e"),
-      background:sel?col+"22":faint,
-      color:sel?col:muted,fontSize:13,cursor:"pointer",fontWeight:sel?700:400
+      padding:"8px 14px",borderRadius:20,margin:"0 4px 6px 0",
+      border:"1.5px solid "+(sel?col:border),
+      background:sel?col+"15":faint,
+      color:sel?col:muted,fontSize:13,cursor:"pointer",fontWeight:sel?700:400,transition:"all .12s"
     }}>{props.label}</button>
   );
 }
 
-function StepCard(props){
-  return (
-    <div className="slide-in" style={{background:cardBg,borderRadius:20,padding:"28px 22px",
-      boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
-      {props.children}
-    </div>
-  );
-}
-
-function StepTitle(props){
-  return (
-    <div style={{marginBottom:24}}>
-      <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{props.sub}</div>
-      <div style={{fontSize:22,fontWeight:700,color:white,lineHeight:1.3}}>{props.title}</div>
-    </div>
-  );
-}
-
-function ProgressBar(props){
-  var pct=Math.round((props.current/props.total)*100);
-  return (
-    <div style={{marginBottom:28}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:muted,marginBottom:6}}>
-        <span>{"Question "+props.current+" of "+props.total}</span>
-        <span>{pct+"%"}</span>
-      </div>
-      <div style={{background:"#1e3a6e",borderRadius:99,height:4}}>
-        <div style={{background:yellow,height:4,borderRadius:99,width:pct+"%",transition:"width .3s ease"}}/>
-      </div>
-    </div>
-  );
+function Lbl(props){
+  return <div style={{fontSize:11,fontWeight:700,color:muted,marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{props.children}</div>;
 }
 
 function NavButtons(props){
   return (
     <div style={{display:"flex",gap:10,marginTop:24}}>
-      {props.onBack && (
-        <button onClick={props.onBack} style={{flex:1,padding:"14px",borderRadius:12,
-          border:"1.5px solid #1e3a6e",background:"transparent",color:muted,
-          fontFamily:DISP,fontSize:16,fontWeight:600,cursor:"pointer"}}>BACK</button>
+      {props.onBack&&(
+        <button onClick={props.onBack} style={{
+          flex:1,padding:"15px",borderRadius:14,
+          border:"1.5px solid "+border,background:white,color:muted,
+          fontFamily:DISP,fontSize:16,fontWeight:600,cursor:"pointer"
+        }}>BACK</button>
       )}
       <button onClick={props.onNext} disabled={props.disabled} style={{
-        flex:2,padding:"14px",borderRadius:12,border:"none",
-        background:props.disabled?"#1e3a6e":yellow,
-        color:props.disabled?muted:navy,
+        flex:2,padding:"15px",borderRadius:14,border:"none",
+        background:props.disabled?faint:navy,
+        color:props.disabled?muted:yellow,
         fontFamily:DISP,fontSize:16,fontWeight:700,letterSpacing:1,
-        cursor:props.disabled?"default":"pointer"
-      }}>{props.nextLabel||"CONTINUE"}</button>
+        cursor:props.disabled?"default":"pointer",transition:"all .12s"
+      }}>{props.nextLabel||"CONTINUE →"}</button>
     </div>
   );
 }
 
-// ── PLAYER FLOW (step-by-step) ────────────────────────────
+function MiniPill(props){
+  var col=scoreCol(props.value);
+  return (
+    <div style={{display:"inline-flex",alignItems:"center",gap:5,
+      background:col+"15",borderRadius:20,padding:"5px 11px",marginRight:6,marginBottom:4}}>
+      <span style={{fontSize:11,color:muted}}>{props.label}</span>
+      <span style={{fontSize:13,fontWeight:800,color:col}}>{props.value}</span>
+    </div>
+  );
+}
+
+function Tag(props){
+  var col=props.col;
+  return <span style={{background:col+"15",color:col,padding:"4px 10px",borderRadius:16,
+    fontSize:12,fontWeight:700,border:"1px solid "+col+"30",marginRight:4,marginBottom:4,display:"inline-block"}}>{props.children}</span>;
+}
+
+function ScorePill(props){
+  var col=typeof props.value==="number"?scoreCol(props.value):muted;
+  return (
+    <div style={{textAlign:"center",background:col+"12",borderRadius:10,padding:"10px 6px",border:"1.5px solid "+col+"30"}}>
+      <div style={{fontSize:9,color:col,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5}}>{props.label}</div>
+      <div style={{fontSize:22,fontWeight:900,color:col,lineHeight:1.2,marginTop:3}}>{props.value}</div>
+    </div>
+  );
+}
+
+// ── PLAYER FLOW ───────────────────────────────────────────
 function PlayerFlow(props){
   var players=props.players, subs=props.subs, onSubmit=props.onSubmit;
   var stepS=useState(0); var step=stepS[0],setStep=stepS[1];
-
   var emptyPain={hasPain:false,side:null,muscles:[],central:[],painType:[],illness:false,illnessTypes:[]};
   var fS=useState({player:"",fatigue:null,sleepQuality:null,hoursSlept:"",appetite:null,soreness:null,painData:emptyPain,comments:"",readyToTrain:null});
   var f=fS[0],setF=fS[1];
 
   function set(k,v){
     setF(function(prev){
-      var next={};Object.keys(prev).forEach(function(key){next[key]=prev[key];});next[k]=v;return next;
+      var n={};Object.keys(prev).forEach(function(key){n[key]=prev[key];});n[k]=v;return n;
     });
   }
-
-  var submitted=step===10;
-  var totalQ=8;
-
-  // step 0 = name select, steps 1-8 = questions, step 9 = review, step 10 = done
   function next(){setStep(function(s){return s+1;});}
   function back(){setStep(function(s){return s-1;});}
-
-  function handlePainChange(v){set("painData",v);}
-
+  function setPD(newPd){set("painData",newPd);}
   function toggleArr(k,item){
     var pd=f.painData;
     var arr=pd[k]||[];
     var next=arr.indexOf(item)>=0?arr.filter(function(x){return x!==item;}):arr.concat([item]);
-    var newPd={};Object.keys(pd).forEach(function(key){newPd[key]=pd[key];});newPd[k]=next;
-    set("painData",newPd);
+    var np={};Object.keys(pd).forEach(function(key){np[key]=pd[key];});np[k]=next;
+    set("painData",np);
   }
+  function submitForm(){onSubmit(f);setStep(10);}
 
-  function setPainField(k,v){
-    var pd=f.painData;
-    var newPd={};Object.keys(pd).forEach(function(key){newPd[key]=pd[key];});newPd[k]=v;
-    set("painData",newPd);
-  }
-
-  function submitForm(){
-    onSubmit(f);
-    setStep(10);
-  }
-
-  var alreadyDone = f.player && subs.some(function(s){return s.player===f.player;});
-  var completedCount = subs.length;
-  var totalPlayers = players.length;
-  var pct = totalPlayers>0?Math.round((completedCount/totalPlayers)*100):0;
-
-  // STEP 0 — Name
-  if(step===0){
-    return (
-      <div className="slide-in">
-        <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontFamily:DISP,fontSize:52,fontWeight:700,color:yellow,letterSpacing:4,lineHeight:1}}>AIK</div>
-          <div style={{color:goldLight,fontSize:13,fontWeight:600,marginTop:8,letterSpacing:2}}>WELLNESS CHECK-IN</div>
-          <div style={{color:muted,fontSize:12,marginTop:6}}>{todayStr()}</div>
-        </div>
-
-        <StepCard>
-          {/* Completion ring */}
-          <div style={{textAlign:"center",marginBottom:28}}>
-            <div style={{position:"relative",width:100,height:100,margin:"0 auto 12px"}}>
-              <svg width="100" height="100" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="#1e3a6e" strokeWidth="8"/>
-                <circle cx="50" cy="50" r="42" fill="none" stroke={pct===100?green:yellow} strokeWidth="8"
-                  strokeDasharray={String(2*3.14159*42)}
-                  strokeDashoffset={String(2*3.14159*42*(1-pct/100))}
-                  strokeLinecap="round" transform="rotate(-90 50 50)"/>
-              </svg>
-              <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",textAlign:"center"}}>
-                <div style={{fontFamily:DISP,fontSize:22,fontWeight:700,color:white}}>{pct+"%"}</div>
-              </div>
-            </div>
-            <div style={{color:white,fontWeight:700,fontSize:15}}>{completedCount+" / "+totalPlayers+" submitted"}</div>
-            <div style={{color:muted,fontSize:12,marginTop:4}}>Team check-in progress</div>
-          </div>
-
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,marginBottom:8,textTransform:"uppercase"}}>Select your name</div>
-            <select value={f.player} onChange={function(e){set("player",e.target.value);}}
-              style={{width:"100%",padding:"14px 16px",borderRadius:12,
-                border:"1.5px solid "+(f.player?"#3b5a8a":"#1e3a6e"),
-                background:faint,color:f.player?white:muted,fontSize:16,outline:"none"}}>
-              <option value="">Choose name...</option>
-              {players.map(function(p){
-                var done=subs.some(function(s){return s.player===p;});
-                return <option key={p} value={p}>{done?"✓ "+p:p}</option>;
-              })}
-            </select>
-          </div>
-
-          {alreadyDone && (
-            <div style={{background:"#1e3a6e",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:amber}}>
-              You have already submitted today. Continuing will update your entry.
-            </div>
-          )}
-
-          <button onClick={next} disabled={!f.player} style={{
-            width:"100%",padding:"16px",borderRadius:12,border:"none",
-            background:f.player?yellow:"#1e3a6e",color:f.player?navy:muted,
-            fontFamily:DISP,fontSize:18,fontWeight:700,letterSpacing:1,cursor:f.player?"pointer":"default"
-          }}>{alreadyDone?"UPDATE CHECK-IN":"START CHECK-IN"}</button>
-        </StepCard>
-      </div>
-    );
-  }
-
-  // STEP 10 — Done
-  if(step===10){
-    return (
-      <div className="slide-in" style={{textAlign:"center",paddingTop:40}}>
-        <div style={{width:90,height:90,borderRadius:"50%",background:green+"22",border:"3px solid "+green,
-          display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",fontSize:40}}>✅</div>
-        <div style={{fontFamily:DISP,fontSize:34,fontWeight:700,color:yellow,letterSpacing:2}}>ALL DONE!</div>
-        <div style={{color:white,fontSize:16,margin:"10px 0 8px"}}>{"Thanks "+f.player.split(" ")[0]+"!"}</div>
-        <div style={{color:muted,fontSize:13,marginBottom:36}}>Your check-in has been submitted.</div>
-        <button onClick={function(){setStep(0);setF({player:"",fatigue:null,sleepQuality:null,hoursSlept:"",appetite:null,soreness:null,painData:emptyPain,comments:"",readyToTrain:null});}}
-          style={{padding:"14px 36px",background:yellow,color:navy,border:"none",borderRadius:12,
-            fontFamily:DISP,fontSize:16,fontWeight:700,letterSpacing:1,cursor:"pointer"}}>BACK TO START</button>
-      </div>
-    );
-  }
-
-  // STEPS 1-8
+  var TOTAL=8;
   var pd=f.painData;
   var hasSided=pd.side==="left"||pd.side==="right"||pd.side==="both";
+  var alreadyDone=f.player&&subs.some(function(s){return s.player===f.player;});
 
+  // DONE
+  if(step===10) return (
+    <div className="fade" style={{textAlign:"center",padding:"56px 16px"}}>
+      <div style={{width:88,height:88,borderRadius:"50%",background:green+"15",
+        border:"3px solid "+green,display:"flex",alignItems:"center",
+        justifyContent:"center",margin:"0 auto 24px",fontSize:42}}>✅</div>
+      <div style={{fontFamily:DISP,fontSize:34,fontWeight:700,color:navy,letterSpacing:1}}>ALL DONE!</div>
+      <div style={{color:muted,fontSize:16,margin:"12px 0 36px"}}>{"Thanks "+f.player.split(" ")[0]+", have a great session! 💪"}</div>
+      <button onClick={function(){setStep(0);setF({player:"",fatigue:null,sleepQuality:null,hoursSlept:"",appetite:null,soreness:null,painData:emptyPain,comments:"",readyToTrain:null});}}
+        style={{padding:"15px 40px",background:navy,color:yellow,border:"none",
+          borderRadius:14,fontFamily:DISP,fontSize:16,fontWeight:700,letterSpacing:1,cursor:"pointer"}}>
+        BACK TO START
+      </button>
+    </div>
+  );
+
+  // NAME SELECT (step 0)
+  if(step===0) return (
+    <div className="fade">
+      <div style={{textAlign:"center",marginBottom:28,padding:"28px 20px",
+        background:navy,borderRadius:20,boxShadow:"0 4px 20px rgba(15,31,61,0.18)"}}>
+        <div style={{fontFamily:DISP,fontSize:46,fontWeight:700,color:yellow,letterSpacing:4,lineHeight:1}}>AIK</div>
+        <div style={{color:goldLight,fontSize:13,fontWeight:600,marginTop:8,letterSpacing:2}}>WELLNESS CHECK-IN</div>
+        <div style={{color:"#7b93bc",fontSize:12,marginTop:6}}>{todayStr()}</div>
+      </div>
+      <Card>
+        <div style={{fontSize:12,color:muted,fontWeight:700,letterSpacing:0.5,
+          textTransform:"uppercase",marginBottom:10}}>Select your name</div>
+        <select value={f.player} onChange={function(e){set("player",e.target.value);}}
+          style={{width:"100%",padding:"15px 16px",borderRadius:12,fontSize:16,
+            border:"1.5px solid "+(f.player?navy:border),
+            background:faint,color:f.player?navy:muted,outline:"none",marginBottom:16}}>
+          <option value="">Choose your name...</option>
+          {players.map(function(p){
+            var done=subs.some(function(s){return s.player===p;});
+            return <option key={p} value={p}>{done?"✓  "+p:p}</option>;
+          })}
+        </select>
+        {alreadyDone&&(
+          <div style={{background:amber+"15",border:"1px solid "+amber+"40",borderRadius:10,
+            padding:"10px 14px",marginBottom:16,fontSize:13,color:amber,fontWeight:500}}>
+            You already submitted today — continuing will update your entry.
+          </div>
+        )}
+        <button onClick={next} disabled={!f.player} style={{
+          width:"100%",padding:"16px",borderRadius:14,border:"none",
+          background:f.player?navy:faint,color:f.player?yellow:muted,
+          fontFamily:DISP,fontSize:18,fontWeight:700,letterSpacing:1,
+          cursor:f.player?"pointer":"default"
+        }}>{alreadyDone?"UPDATE CHECK-IN":"START CHECK-IN →"}</button>
+      </Card>
+    </div>
+  );
+
+  // QUESTIONS 1-8
   return (
-    <div className="slide-in">
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
-        <div style={{fontFamily:DISP,fontSize:24,fontWeight:700,color:yellow,letterSpacing:2}}>AIK</div>
-        <div style={{flex:1}}>
-          <ProgressBar current={step} total={totalQ}/>
-        </div>
+    <div>
+      {/* Progress header */}
+      <div style={{background:white,borderRadius:16,padding:"16px 18px",
+        marginBottom:16,boxShadow:"0 1px 6px rgba(15,31,61,0.07)"}}>
+        <ProgressBar current={step} total={TOTAL} label={"Question "+step+" of "+TOTAL}/>
+        {/* Mini summary pills */}
+        {step>1&&(
+          <div style={{display:"flex",flexWrap:"wrap",marginTop:4}}>
+            {f.fatigue&&<MiniPill label="Fatigue" value={f.fatigue}/>}
+            {f.sleepQuality&&<MiniPill label="Sleep" value={f.sleepQuality}/>}
+            {f.appetite&&<MiniPill label="Appetite" value={f.appetite}/>}
+            {f.soreness&&<MiniPill label="Soreness" value={f.soreness}/>}
+          </div>
+        )}
       </div>
 
-      <StepCard>
-        {step===1 && (
+      <Card>
+        {/* Q1 Fatigue */}
+        {step===1&&(
           <div>
-            <StepTitle sub="Question 1 of 8" title="How energised do you feel right now?"/>
+            <QTitle sub="Question 1 of 8" title="How energised do you feel right now?"/>
             <ScaleRow value={f.fatigue} onChange={function(v){set("fatigue",v);}} lo="Extremely tired" hi="Fully energised"/>
             <NavButtons onBack={back} onNext={next} disabled={!f.fatigue}/>
           </div>
         )}
-
-        {step===2 && (
+        {/* Q2 Sleep */}
+        {step===2&&(
           <div>
-            <StepTitle sub="Question 2 of 8" title="How well did you sleep last night?"/>
+            <QTitle sub="Question 2 of 8" title="How well did you sleep last night?"/>
             <ScaleRow value={f.sleepQuality} onChange={function(v){set("sleepQuality",v);}} lo="Very poor" hi="Excellent"/>
             <div style={{marginTop:22}}>
-              <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Hours slept (optional)</div>
+              <Lbl>Hours slept (optional)</Lbl>
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                 {HOURS.map(function(h){
                   var sel=f.hoursSlept===h;
                   return (
                     <button key={h} onClick={function(){set("hoursSlept",sel?"":h);}} style={{
                       padding:"9px 13px",borderRadius:10,
-                      border:"1.5px solid "+(sel?yellow:"#1e3a6e"),
-                      background:sel?yellow+"22":faint,
-                      color:sel?yellow:muted,fontSize:13,fontWeight:sel?700:400,cursor:"pointer"
+                      border:"1.5px solid "+(sel?navy:border),
+                      background:sel?navy:faint,color:sel?white:muted,
+                      fontSize:13,fontWeight:sel?700:400,cursor:"pointer"
                     }}>{h}</button>
                   );
                 })}
@@ -381,82 +375,68 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={!f.sleepQuality}/>
           </div>
         )}
-
-        {step===3 && (
+        {/* Q3 Appetite */}
+        {step===3&&(
           <div>
-            <StepTitle sub="Question 3 of 8" title="How is your appetite today?"/>
+            <QTitle sub="Question 3 of 8" title="How is your appetite today?"/>
             <ScaleRow value={f.appetite} onChange={function(v){set("appetite",v);}} lo="Very poor" hi="Very good"/>
             <NavButtons onBack={back} onNext={next} disabled={!f.appetite}/>
           </div>
         )}
-
-        {step===4 && (
+        {/* Q4 Soreness */}
+        {step===4&&(
           <div>
-            <StepTitle sub="Question 4 of 8" title="How do your muscles feel today?"/>
+            <QTitle sub="Question 4 of 8" title="How do your muscles feel today?"/>
             <ScaleRow value={f.soreness} onChange={function(v){set("soreness",v);}} lo="Very sore" hi="No soreness"/>
             <NavButtons onBack={back} onNext={next} disabled={!f.soreness}/>
           </div>
         )}
-
-        {step===5 && (
+        {/* Q5 Pain */}
+        {step===5&&(
           <div>
-            <StepTitle sub="Question 5 of 8" title="Do you have any pain or discomfort?"/>
+            <QTitle sub="Question 5 of 8" title="Do you have any pain or discomfort?"/>
             <ChoiceRow value={pd.hasPain?"yes":"no"}
               onChange={function(v){
-                var newPd={hasPain:v==="yes",side:null,muscles:[],central:[],painType:[],illness:pd.illness,illnessTypes:pd.illnessTypes};
-                set("painData",newPd);
+                var np={hasPain:v==="yes",side:null,muscles:[],central:[],painType:[],illness:pd.illness,illnessTypes:pd.illnessTypes};
+                set("painData",np);
               }}
-              options={[["yes","Yes",red],["no","No",green]]}/>
-
-            {pd.hasPain && (
+              options={[["yes","⚠️ Yes",red],["no","✅ No",green]]}/>
+            {pd.hasPain&&(
               <div style={{marginTop:20,display:"flex",flexDirection:"column",gap:16}}>
                 <div>
-                  <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,textTransform:"uppercase",marginBottom:8}}>Side affected</div>
+                  <Lbl>Side affected</Lbl>
                   <div style={{display:"flex",gap:8}}>
-                    {[["left","Left"],["both","Both"],["right","Right"],["central","Central"]].map(function(pair){
+                    {[["left","← Left"],["both","Both"],["right","Right →"],["central","Central"]].map(function(pair){
                       var v=pair[0],l=pair[1],sel=pd.side===v;
                       return (
-                        <button key={v} onClick={function(){setPainField("side",pd.side===v?null:v);}} style={{
-                          flex:1,padding:"12px 4px",borderRadius:10,
-                          border:"1.5px solid "+(sel?red:"#1e3a6e"),
-                          background:sel?red+"22":faint,
-                          color:sel?red:muted,fontWeight:sel?700:400,fontSize:13,cursor:"pointer"
-                        }}>{l}</button>
+                        <button key={v} onClick={function(){
+                          var np={};Object.keys(pd).forEach(function(k){np[k]=pd[k];});
+                          np.side=pd.side===v?null:v;np.muscles=[];np.central=[];
+                          set("painData",np);
+                        }} style={{flex:1,padding:"12px 4px",borderRadius:10,
+                          border:"1.5px solid "+(sel?red:border),
+                          background:sel?red+"12":faint,color:sel?red:muted,
+                          fontWeight:sel?700:400,fontSize:12,cursor:"pointer"}}>{l}</button>
                       );
                     })}
                   </div>
                 </div>
-
-                {hasSided && (
+                {hasSided&&(
                   <div>
-                    <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,textTransform:"uppercase",marginBottom:8}}>Muscle / Area</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                      {PAIRED.map(function(m){
-                        return <Chip key={m} label={m} color={red} selected={(pd.muscles||[]).indexOf(m)>=0} onClick={function(){toggleArr("muscles",m);}}/>;
-                      })}
-                    </div>
+                    <Lbl>Muscle / Area</Lbl>
+                    <div>{PAIRED.map(function(m){return <Chip key={m} label={m} color={red} selected={(pd.muscles||[]).indexOf(m)>=0} onClick={function(){toggleArr("muscles",m);}}/>;})}</div>
                   </div>
                 )}
-
-                {pd.side==="central" && (
+                {pd.side==="central"&&(
                   <div>
-                    <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,textTransform:"uppercase",marginBottom:8}}>Area</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                      {CENTRAL.map(function(m){
-                        return <Chip key={m} label={m} color={red} selected={(pd.central||[]).indexOf(m)>=0} onClick={function(){toggleArr("central",m);}}/>;
-                      })}
-                    </div>
+                    <Lbl>Area</Lbl>
+                    <div>{CENTRAL.map(function(m){return <Chip key={m} label={m} color={red} selected={(pd.central||[]).indexOf(m)>=0} onClick={function(){toggleArr("central",m);}}/>;})}</div>
                   </div>
                 )}
-
-                {pd.side && (
+                {pd.side&&(
                   <div>
-                    <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,textTransform:"uppercase",marginBottom:8}}>Type of pain</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                      {PAIN_T.map(function(t){
-                        return <Chip key={t} label={t} color={red} selected={(pd.painType||[]).indexOf(t)>=0} onClick={function(){toggleArr("painType",t);}}/>;
-                      })}
-                    </div>
+                    <Lbl>Type of pain</Lbl>
+                    <div>{PAIN_T.map(function(t){return <Chip key={t} label={t} color={red} selected={(pd.painType||[]).indexOf(t)>=0} onClick={function(){toggleArr("painType",t);}}/>;})}</div>
                   </div>
                 )}
               </div>
@@ -464,148 +444,80 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={pd.hasPain===undefined||pd.hasPain===null}/>
           </div>
         )}
-
-        {step===6 && (
+        {/* Q6 Illness */}
+        {step===6&&(
           <div>
-            <StepTitle sub="Question 6 of 8" title="Are you feeling unwell or ill?"/>
+            <QTitle sub="Question 6 of 8" title="Are you feeling unwell or ill?"/>
             <ChoiceRow value={pd.illness?"yes":"no"}
               onChange={function(v){
-                var newPd={hasPain:pd.hasPain,side:pd.side,muscles:pd.muscles,central:pd.central,painType:pd.painType,illness:v==="yes",illnessTypes:[]};
-                set("painData",newPd);
+                var np={};Object.keys(pd).forEach(function(k){np[k]=pd[k];});np.illness=v==="yes";np.illnessTypes=[];
+                set("painData",np);
               }}
-              options={[["yes","Yes",amber],["no","No",green]]}/>
-
-            {pd.illness && (
-              <div style={{marginTop:20}}>
-                <div style={{fontSize:12,color:muted,fontWeight:600,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Type (select all that apply)</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                  {ILLNESS.map(function(t){
-                    return <Chip key={t} label={t} color={amber} selected={(pd.illnessTypes||[]).indexOf(t)>=0} onClick={function(){toggleArr("illnessTypes",t);}}/>;
-                  })}
-                </div>
+              options={[["yes","🤒 Yes",amber],["no","✅ No",green]]}/>
+            {pd.illness&&(
+              <div style={{marginTop:18}}>
+                <Lbl>Type (select all that apply)</Lbl>
+                <div>{ILLNESS.map(function(t){return <Chip key={t} label={t} color={amber} selected={(pd.illnessTypes||[]).indexOf(t)>=0} onClick={function(){toggleArr("illnessTypes",t);}}/>;})}</div>
               </div>
             )}
             <NavButtons onBack={back} onNext={next} disabled={pd.illness===undefined||pd.illness===null}/>
           </div>
         )}
-
-        {step===7 && (
+        {/* Q7 Ready */}
+        {step===7&&(
           <div>
-            <StepTitle sub="Question 7 of 8" title="Are you ready to train today?"/>
-            <ChoiceRow value={f.readyToTrain}
-              onChange={function(v){set("readyToTrain",v);}}
-              options={[["yes","Yes",green],["partial","Partially",amber],["no","No",red]]}/>
+            <QTitle sub="Question 7 of 8" title="Are you ready to train today?"/>
+            <ChoiceRow value={f.readyToTrain} onChange={function(v){set("readyToTrain",v);}}
+              options={[["yes","✅ Yes",green],["partial","⚡ Partially",amber],["no","❌ No",red]]}/>
             <NavButtons onBack={back} onNext={next} disabled={!f.readyToTrain}/>
           </div>
         )}
-
-        {step===8 && (
+        {/* Q8 Comments */}
+        {step===8&&(
           <div>
-            <StepTitle sub="Question 8 of 8" title="Anything we should know?"/>
-            <div style={{fontSize:12,color:muted,marginBottom:10}}>Sleep, stress, travel, illness, etc. (optional)</div>
+            <QTitle sub="Question 8 of 8" title="Anything we should know?"/>
+            <div style={{fontSize:13,color:muted,marginBottom:12}}>Sleep, stress, travel, illness, etc.</div>
             <textarea value={f.comments} onChange={function(e){set("comments",e.target.value);}}
-              placeholder="Add a comment..."
-              style={{width:"100%",padding:"14px",borderRadius:12,border:"1.5px solid #1e3a6e",
-                background:faint,color:white,fontSize:14,minHeight:100,resize:"vertical",outline:"none"}}/>
-            <NavButtons onBack={back} onNext={submitForm} nextLabel="SUBMIT"/>
+              placeholder="Optional — add a comment..."
+              style={{width:"100%",padding:"14px",borderRadius:12,border:"1.5px solid "+border,
+                fontSize:14,minHeight:110,resize:"none",color:navy,background:faint,outline:"none"}}/>
+            <NavButtons onBack={back} onNext={submitForm} nextLabel="SUBMIT ✓"/>
           </div>
         )}
-      </StepCard>
-
-      {/* Summary bar at bottom */}
-      {step>1 && (
-        <div style={{marginTop:20,background:cardBg,borderRadius:16,padding:"14px 18px",display:"flex",gap:10,flexWrap:"wrap"}}>
-          {f.fatigue && <MiniPill label="Fatigue" value={f.fatigue}/>}
-          {f.sleepQuality && <MiniPill label="Sleep" value={f.sleepQuality}/>}
-          {f.appetite && <MiniPill label="Appetite" value={f.appetite}/>}
-          {f.soreness && <MiniPill label="Soreness" value={f.soreness}/>}
-        </div>
-      )}
+      </Card>
     </div>
   );
 }
 
-function MiniPill(props){
-  var col=scoreCol(props.value);
-  return (
-    <div style={{display:"flex",alignItems:"center",gap:5,background:col+"22",borderRadius:20,padding:"4px 10px"}}>
-      <span style={{fontSize:11,color:muted}}>{props.label}</span>
-      <span style={{fontSize:13,fontWeight:800,color:col}}>{props.value}</span>
-    </div>
-  );
-}
-
-// ── PIN Screen ────────────────────────────────────────────
+// ── PIN SCREEN ────────────────────────────────────────────
 function PinScreen(props){
   var ps=useState(""); var p=ps[0],setP=ps[1];
   var es=useState(false); var err=es[0],setErr=es[1];
   function check(){if(p===PIN){props.onUnlock();}else{setErr(true);setP("");}}
   return (
-    <div style={{maxWidth:320,margin:"80px auto",textAlign:"center",padding:"0 16px"}}>
-      <div style={{fontFamily:DISP,fontSize:52,fontWeight:700,color:yellow,letterSpacing:4,marginBottom:8}}>AIK</div>
-      <div style={{color:muted,fontSize:13,marginBottom:32}}>Staff access only</div>
+    <div className="fade" style={{maxWidth:340,margin:"72px auto",padding:"0 16px",textAlign:"center"}}>
+      <div style={{background:navy,borderRadius:20,padding:"28px 24px",marginBottom:20,
+        boxShadow:"0 4px 20px rgba(15,31,61,0.18)"}}>
+        <div style={{fontFamily:DISP,fontSize:44,fontWeight:700,color:yellow,letterSpacing:4}}>AIK</div>
+        <div style={{color:"#7b93bc",fontSize:13,marginTop:4}}>Staff access only</div>
+      </div>
       <input type="password" value={p}
         onChange={function(e){setP(e.target.value);setErr(false);}}
         onKeyDown={function(e){if(e.key==="Enter")check();}}
         placeholder="Enter PIN"
         style={{width:"100%",padding:16,textAlign:"center",fontSize:24,letterSpacing:10,
-          border:"2px solid "+(err?red:"#1e3a6e"),borderRadius:12,outline:"none",
-          marginBottom:12,background:cardBg,color:white}}/>
-      {err && <p style={{color:red,fontSize:13,margin:"0 0 12px"}}>Incorrect PIN. Try again.</p>}
-      <button onClick={check} style={{width:"100%",padding:15,background:yellow,color:navy,border:"none",
-        borderRadius:12,fontFamily:DISP,fontSize:17,fontWeight:700,letterSpacing:1,cursor:"pointer"}}>UNLOCK DASHBOARD</button>
-      <p style={{fontSize:11,color:"#3b5a8a",marginTop:16}}>Default PIN: 1234</p>
+          border:"2px solid "+(err?red:border),borderRadius:14,outline:"none",
+          marginBottom:10,background:white,color:navy}}/>
+      {err&&<p style={{color:red,fontSize:13,margin:"0 0 10px"}}>Incorrect PIN.</p>}
+      <button onClick={check} style={{width:"100%",padding:15,background:navy,color:yellow,
+        border:"none",borderRadius:14,fontFamily:DISP,fontSize:17,fontWeight:700,
+        letterSpacing:1,cursor:"pointer",marginTop:4}}>UNLOCK DASHBOARD</button>
+      <p style={{fontSize:11,color:muted,marginTop:14}}>Default PIN: 1234</p>
     </div>
   );
 }
 
-// ── Tag / ScorePill ───────────────────────────────────────
-function Tag(props){var col=props.col;return <span style={{background:col+"22",color:col,padding:"4px 10px",borderRadius:16,fontSize:12,fontWeight:700,border:"1px solid "+col+"44"}}>{props.children}</span>;}
-function ScorePill(props){
-  var col=typeof props.value==="number"?scoreCol(props.value):muted;
-  return (
-    <div style={{textAlign:"center",background:col+"18",borderRadius:8,padding:"10px 6px",border:"1.5px solid "+col+"44"}}>
-      <div style={{fontSize:9,color:col,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5}}>{props.label}</div>
-      <div style={{fontSize:22,fontWeight:900,color:col,lineHeight:1.2,marginTop:3}}>{props.value}</div>
-    </div>
-  );
-}
-
-// ── Simple bar chart ──────────────────────────────────────
-function SimpleBar(props){
-  var data=props.data;
-  if(!data.length) return null;
-  var KEYS=[{k:"Fatigue",c:"#3b82f6"},{k:"Sleep",c:"#8b5cf6"},{k:"Appetite",c:green},{k:"Soreness",c:amber}];
-  var H=120,bW=8,gap=2,grpGap=12;
-  var grpW=KEYS.length*(bW+gap)-gap+grpGap;
-  var W=Math.max(data.length*grpW+20,300);
-  return (
-    <div style={{overflowX:"auto"}}>
-      <svg width={W} height={H+24} style={{display:"block"}}>
-        {data.map(function(d,gi){
-          return KEYS.map(function(kobj,ki){
-            var bh=Math.round((d[kobj.k]/5)*H);
-            var x=10+gi*grpW+ki*(bW+gap);
-            return <rect key={kobj.k} x={x} y={H-bh} width={bW} height={bh} fill={kobj.c} rx={2}/>;
-          });
-        })}
-        {data.map(function(d,gi){
-          return <text key={gi} x={10+gi*grpW+grpW/2-grpGap/2} y={H+16} textAnchor="middle" fontSize={8} fill={muted}>{d.name}</text>;
-        })}
-        <line x1={10} y1={H} x2={W-10} y2={H} stroke="#1e3a6e" strokeWidth={1}/>
-      </svg>
-      <div style={{display:"flex",gap:12,marginTop:6,flexWrap:"wrap"}}>
-        {KEYS.map(function(kobj){
-          return <span key={kobj.k} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:muted}}>
-            <span style={{width:8,height:8,background:kobj.c,borderRadius:2,display:"inline-block"}}/>{kobj.k}
-          </span>;
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Roster Manager ────────────────────────────────────────
+// ── ROSTER MANAGER ────────────────────────────────────────
 function RosterManager(props){
   var players=props.players,onUpdate=props.onUpdate;
   var ns=useState(""); var newName=ns[0],setNewName=ns[1];
@@ -613,59 +525,61 @@ function RosterManager(props){
   var cs=useState(null); var confirm=cs[0],setConfirm=cs[1];
   var sorted=players.slice().sort(function(a,b){return a.split(" ").pop().localeCompare(b.split(" ").pop());});
   var filtered=sorted.filter(function(p){return p.toLowerCase().indexOf(search.toLowerCase())>=0;});
-  function save(u){savePlayers(u);onUpdate(u);}
+  function save(u){saveLS(PLAYERS_KEY,u);onUpdate(u);}
   function add(){var n=newName.trim();if(!n||players.indexOf(n)>=0)return;save(players.concat([n]));setNewName("");}
   function remove(name){save(players.filter(function(p){return p!==name;}));setConfirm(null);}
   return (
     <div>
-      <div style={{background:cardBg,borderRadius:16,padding:18,marginBottom:14}}>
-        <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:yellow,letterSpacing:1,marginBottom:12}}>ADD PLAYER</div>
+      <div style={{background:white,borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 1px 6px rgba(15,31,61,0.07)"}}>
+        <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:navy,letterSpacing:1,marginBottom:12}}>ADD PLAYER</div>
         <div style={{display:"flex",gap:8}}>
-          <input value={newName} onChange={function(e){setNewName(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")add();}}
-            placeholder="Full name..."
-            style={{flex:1,padding:"11px 14px",borderRadius:10,border:"1.5px solid #1e3a6e",background:faint,color:white,fontSize:14,outline:"none"}}/>
-          <button onClick={add} style={{padding:"11px 18px",background:yellow,color:navy,border:"none",borderRadius:10,fontFamily:DISP,fontSize:14,fontWeight:700,cursor:"pointer"}}>ADD</button>
+          <input value={newName} onChange={function(e){setNewName(e.target.value);}}
+            onKeyDown={function(e){if(e.key==="Enter")add();}} placeholder="Full name..."
+            style={{flex:1,padding:"11px 14px",borderRadius:10,border:"1.5px solid "+border,
+              fontSize:14,color:navy,background:faint,outline:"none"}}/>
+          <button onClick={add} style={{padding:"11px 18px",background:navy,color:yellow,border:"none",
+            borderRadius:10,fontFamily:DISP,fontSize:14,fontWeight:700,cursor:"pointer"}}>ADD</button>
         </div>
       </div>
-      <div style={{background:cardBg,borderRadius:16,padding:18}}>
+      <div style={{background:white,borderRadius:16,padding:18,boxShadow:"0 1px 6px rgba(15,31,61,0.07)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:yellow,letterSpacing:1}}>{"SQUAD — "+players.length}</div>
+          <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:navy}}>{"SQUAD — "+players.length}</div>
           <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..."
-            style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #1e3a6e",background:faint,color:white,fontSize:13,outline:"none",width:120}}/>
+            style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid "+border,
+              fontSize:13,color:navy,background:faint,outline:"none",width:120}}/>
         </div>
         {filtered.map(function(p){
           return (
             <div key={p} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-              padding:"10px 12px",borderRadius:10,background:faint,
-              border:"1px solid "+(confirm===p?red:"#1e3a6e"),marginBottom:6}}>
-              <span style={{fontSize:14,color:white,fontWeight:500}}>{p}</span>
+              padding:"11px 12px",borderRadius:10,background:faint,
+              border:"1px solid "+(confirm===p?red:border),marginBottom:6}}>
+              <span style={{fontSize:14,color:navy,fontWeight:500}}>{p}</span>
               {confirm===p?(
-                <div style={{display:"flex",gap:6}}>
-                  <span style={{fontSize:12,color:red,fontWeight:600,alignSelf:"center"}}>Remove?</span>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <span style={{fontSize:12,color:red,fontWeight:600}}>Remove?</span>
                   <button onClick={function(){remove(p);}} style={{padding:"5px 12px",background:red,color:white,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>Yes</button>
-                  <button onClick={function(){setConfirm(null);}} style={{padding:"5px 12px",background:"#1e3a6e",color:muted,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>No</button>
+                  <button onClick={function(){setConfirm(null);}} style={{padding:"5px 12px",background:border,color:muted,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>No</button>
                 </div>
               ):(
-                <button onClick={function(){setConfirm(p);}} style={{padding:"5px 10px",background:"transparent",color:muted,border:"1px solid #1e3a6e",borderRadius:6,fontSize:12,cursor:"pointer"}}>Remove</button>
+                <button onClick={function(){setConfirm(p);}} style={{padding:"5px 12px",background:"transparent",color:muted,border:"1px solid "+border,borderRadius:6,fontSize:12,cursor:"pointer"}}>Remove</button>
               )}
             </div>
           );
         })}
+        {filtered.length===0&&<div style={{textAlign:"center",color:muted,padding:24,fontSize:13}}>No players found</div>}
       </div>
     </div>
   );
 }
 
-// ── Dashboard ─────────────────────────────────────────────
+// ── DASHBOARD ─────────────────────────────────────────────
 function Dashboard(props){
   var subs=props.subs,players=props.players,onExport=props.onExport,onPlayersUpdate=props.onPlayersUpdate,onClearDay=props.onClearDay;
   var ts=useState("overview"); var tab=ts[0],setTab=ts[1];
   var flagged=subs.filter(isFlagged);
   var withPain=subs.filter(function(s){return s.painData&&s.painData.hasPain;}).length;
   var withIllness=subs.filter(function(s){return s.painData&&s.painData.illness;}).length;
-  var readyYes=subs.filter(function(s){return s.readyToTrain==="yes";}).length;
   var total=subs.length;
-  var barData=subs.map(function(s){return{name:s.player.split(" ").pop(),Fatigue:s.fatigue,Sleep:s.sleepQuality,Appetite:s.appetite,Soreness:s.soreness};});
 
   function formatPain(s){
     var pd=s.painData;if(!pd||!pd.hasPain)return null;
@@ -675,72 +589,82 @@ function Dashboard(props){
     return [side,areas,type].filter(function(x){return x;}).join(" · ")||"Reported";
   }
 
-  var TABS=[["overview","Overview"],["players","Players"],["flags","🚨 "+flagged.length+" Flags"],["roster","Roster"]];
+  var TABS=[["overview","Overview"],["players","Players"],["flags","🚨 Flags ("+flagged.length+")"],["roster","👥 Roster"]];
 
   return (
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+      {/* Header */}
+      <div style={{background:navy,borderRadius:16,padding:"16px 18px",marginBottom:14,
+        display:"flex",justifyContent:"space-between",alignItems:"center",
+        boxShadow:"0 4px 16px rgba(15,31,61,0.15)"}}>
         <div>
-          <div style={{fontFamily:DISP,fontSize:32,fontWeight:700,color:yellow,letterSpacing:3,lineHeight:1}}>AIK</div>
-          <div style={{fontSize:12,color:muted,marginTop:4}}>{new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
+          <div style={{fontFamily:DISP,fontSize:28,fontWeight:700,color:yellow,letterSpacing:2,lineHeight:1}}>AIK</div>
+          <div style={{fontSize:12,color:"#7b93bc",marginTop:3}}>{new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={onExport} style={{padding:"9px 14px",background:yellow,color:navy,border:"none",borderRadius:10,fontFamily:DISP,fontSize:13,fontWeight:700,cursor:"pointer"}}>CSV</button>
-          <button onClick={onClearDay} style={{padding:"9px 14px",background:"#1e3a6e",color:muted,border:"none",borderRadius:10,fontFamily:DISP,fontSize:13,fontWeight:600,cursor:"pointer"}}>Clear Day</button>
+          <button onClick={onExport} style={{padding:"9px 14px",background:yellow,color:navy,border:"none",borderRadius:10,fontFamily:DISP,fontSize:13,fontWeight:700,cursor:"pointer"}}>⬇ CSV</button>
+          <button onClick={onClearDay} style={{padding:"9px 14px",background:"#1e3a6e",color:"#7b93bc",border:"none",borderRadius:10,fontFamily:DISP,fontSize:13,fontWeight:600,cursor:"pointer"}}>Clear</button>
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>
-        {[["Done",total+"/"+players.length,total===players.length?green:yellow],
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+        {[
+          ["Done",total+"/"+players.length,total===players.length?green:navy],
           ["Flags",flagged.length,flagged.length?red:green],
           ["Pain",withPain,withPain?red:green],
           ["Ill",withIllness,withIllness?amber:green]
         ].map(function(item){
           return (
-            <div key={item[0]} style={{background:cardBg,borderRadius:14,padding:"14px 8px",textAlign:"center",borderTop:"3px solid "+item[2]}}>
-              <div style={{fontSize:22,fontWeight:900,color:item[2]}}>{item[1]}</div>
+            <div key={item[0]} style={{background:white,borderRadius:14,padding:"13px 8px",
+              textAlign:"center",boxShadow:"0 1px 4px rgba(15,31,61,0.07)",borderTop:"3px solid "+item[2]}}>
+              <div style={{fontSize:20,fontWeight:900,color:item[2]}}>{item[1]}</div>
               <div style={{fontSize:10,fontWeight:700,color:muted,textTransform:"uppercase",letterSpacing:0.4,marginTop:2}}>{item[0]}</div>
             </div>
           );
         })}
       </div>
 
-      <div style={{display:"flex",gap:4,background:"#0a1628",borderRadius:12,padding:4,marginBottom:16}}>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:3,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:14}}>
         {TABS.map(function(t){
           return (
             <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{
-              flex:1,padding:"9px 4px",borderRadius:8,border:"none",
-              background:tab===t[0]?cardBg:"transparent",
+              flex:1,padding:"9px 3px",borderRadius:8,border:"none",
+              background:tab===t[0]?navy:"transparent",
               color:tab===t[0]?yellow:muted,
-              fontWeight:tab===t[0]?700:500,cursor:"pointer",fontSize:12
+              fontWeight:tab===t[0]?700:500,cursor:"pointer",fontSize:11
             }}>{t[1]}</button>
           );
         })}
       </div>
 
-      {total===0&&tab!=="roster"&&<div style={{background:cardBg,borderRadius:16,padding:48,textAlign:"center",color:muted}}>No submissions yet...</div>}
+      {total===0&&tab!=="roster"&&(
+        <div style={{background:white,borderRadius:16,padding:48,textAlign:"center",color:muted,
+          boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>No submissions yet...</div>
+      )}
 
+      {/* OVERVIEW */}
       {tab==="overview"&&total>0&&(
-        <div style={{background:cardBg,borderRadius:16,padding:18}}>
-          <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:yellow,letterSpacing:1,marginBottom:14}}>TEAM AVERAGES</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:22}}>
-            <ScorePill label="Fatigue" value={parseFloat(avg(subs,"fatigue"))}/>
-            <ScorePill label="Sleep" value={parseFloat(avg(subs,"sleepQuality"))}/>
-            <ScorePill label="Appetite" value={parseFloat(avg(subs,"appetite"))}/>
-            <ScorePill label="Soreness" value={parseFloat(avg(subs,"soreness"))}/>
+        <div style={{background:white,borderRadius:16,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>
+          <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:navy,letterSpacing:1,marginBottom:14}}>TEAM AVERAGES</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {[["Fatigue","fatigue"],["Sleep","sleepQuality"],["Appetite","appetite"],["Soreness","soreness"]].map(function(pair){
+              return <ScorePill key={pair[0]} label={pair[0]} value={parseFloat(avgVal(subs,pair[1]))}/>;
+            })}
           </div>
-          <div style={{fontFamily:DISP,fontSize:13,fontWeight:600,color:yellow,letterSpacing:1,marginBottom:12}}>SCORES BY PLAYER</div>
-          <SimpleBar data={barData}/>
         </div>
       )}
 
+      {/* PLAYERS */}
       {tab==="players"&&total>0&&subs.map(function(s){
         var pain=formatPain(s);var fl=isFlagged(s);var pd=s.painData||{};
         return (
-          <div key={s.player} style={{background:cardBg,borderRadius:16,padding:16,marginBottom:12,borderLeft:"4px solid "+(fl?red:green)}}>
+          <div key={s.player} style={{background:white,borderRadius:16,padding:16,marginBottom:10,
+            boxShadow:"0 1px 4px rgba(15,31,61,0.07)",borderLeft:"4px solid "+(fl?red:green)}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontWeight:800,color:white,fontSize:15}}>{s.player}</span>
+                <span style={{fontWeight:800,color:navy}}>{s.player}</span>
                 {fl&&<Tag col={red}>FLAGGED</Tag>}
               </div>
               <span style={{fontSize:11,color:muted}}>{s.timestamp}</span>
@@ -750,31 +674,33 @@ function Dashboard(props){
               <ScorePill label="Sleep" value={s.sleepQuality}/>
               <ScorePill label="Appetite" value={s.appetite}/>
               <ScorePill label="Soreness" value={s.soreness}/>
-              <div style={{textAlign:"center",background:faint,borderRadius:8,padding:"8px 4px"}}>
+              <div style={{textAlign:"center",background:faint,borderRadius:10,padding:"8px 4px"}}>
                 <div style={{fontSize:9,color:muted,fontWeight:800,textTransform:"uppercase"}}>Ready</div>
-                <div style={{fontSize:18,marginTop:3}}>{s.readyToTrain==="yes"?"✅":s.readyToTrain==="partial"?"⚡":"❌"}</div>
+                <div style={{fontSize:20,marginTop:3}}>{s.readyToTrain==="yes"?"✅":s.readyToTrain==="partial"?"⚡":"❌"}</div>
               </div>
             </div>
-            {s.hoursSlept&&<div style={{fontSize:12,color:muted,marginBottom:6}}>{"Slept: "+s.hoursSlept+"h"}</div>}
-            {pain&&<div style={{fontSize:12,marginBottom:6,padding:"6px 10px",background:red+"11",borderRadius:8,color:red}}>{"⚠️ Pain: "+pain}</div>}
-            {pd.illness&&<div style={{fontSize:12,marginBottom:6,padding:"6px 10px",background:amber+"11",borderRadius:8,color:amber}}>{"🤒 "+((pd.illnessTypes||[]).join(", ")||"Illness reported")}</div>}
+            {s.hoursSlept&&<div style={{fontSize:12,color:muted,marginBottom:6}}>{"🛏 Slept: "+s.hoursSlept+"h"}</div>}
+            {pain&&<div style={{fontSize:12,marginBottom:6,padding:"7px 10px",background:red+"10",borderRadius:8,color:red}}>{"⚠️ Pain: "+pain}</div>}
+            {pd.illness&&<div style={{fontSize:12,marginBottom:6,padding:"7px 10px",background:amber+"10",borderRadius:8,color:amber}}>{"🤒 "+((pd.illnessTypes||[]).join(", ")||"Illness reported")}</div>}
             {s.comments&&<div style={{fontSize:12,color:muted,background:faint,borderRadius:8,padding:"8px 12px"}}>{"💬 "+s.comments}</div>}
           </div>
         );
       })}
 
+      {/* FLAGS */}
       {tab==="flags"&&total>0&&(
         flagged.length===0?(
-          <div style={{background:cardBg,borderRadius:16,padding:48,textAlign:"center"}}>
+          <div style={{background:white,borderRadius:16,padding:48,textAlign:"center",boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>
             <div style={{fontSize:40,marginBottom:12}}>🎉</div>
             <div style={{fontWeight:700,color:green,fontSize:15}}>No flags today — team looking good!</div>
           </div>
         ):flagged.map(function(s){
           var pain=formatPain(s);var pd=s.painData||{};
           return (
-            <div key={s.player} style={{background:cardBg,borderRadius:16,padding:16,marginBottom:12,borderLeft:"4px solid "+red}}>
-              <div style={{fontWeight:800,color:white,fontSize:15,marginBottom:10}}>{s.player}</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:s.comments?10:0}}>
+            <div key={s.player} style={{background:white,borderRadius:16,padding:16,marginBottom:10,
+              boxShadow:"0 1px 4px rgba(15,31,61,0.07)",borderLeft:"4px solid "+red}}>
+              <div style={{fontWeight:800,color:navy,marginBottom:10}}>{s.player}</div>
+              <div style={{display:"flex",flexWrap:"wrap"}}>
                 {s.fatigue<=2&&<Tag col={red}>{"Low energy ("+s.fatigue+"/5)"}</Tag>}
                 {s.sleepQuality<=2&&<Tag col={red}>{"Poor sleep ("+s.sleepQuality+"/5)"}</Tag>}
                 {s.soreness<=2&&<Tag col={red}>{"High soreness ("+s.soreness+"/5)"}</Tag>}
@@ -784,34 +710,34 @@ function Dashboard(props){
                 {s.readyToTrain==="no"&&<Tag col={red}>Not ready</Tag>}
                 {s.readyToTrain==="partial"&&<Tag col={amber}>Partially ready</Tag>}
               </div>
-              {s.comments&&<div style={{fontSize:12,color:muted,background:faint,borderRadius:8,padding:"8px 12px"}}>{"💬 "+s.comments}</div>}
+              {s.comments&&<div style={{fontSize:12,color:muted,background:faint,borderRadius:8,padding:"8px 12px",marginTop:8}}>{"💬 "+s.comments}</div>}
             </div>
           );
         })
       )}
 
+      {/* ROSTER */}
       {tab==="roster"&&<RosterManager players={players} onUpdate={onPlayersUpdate}/>}
     </div>
   );
 }
 
-// ── App ───────────────────────────────────────────────────
+// ── APP ───────────────────────────────────────────────────
 function App(){
   var vs=useState("player"); var view=vs[0],setView=vs[1];
   var us=useState(false); var unlocked=us[0],setUnlocked=us[1];
-  var subS=useState(function(){return loadSubs();}); var subs=subS[0],setSubs=subS[1];
-  var pls=useState(function(){return loadPlayers();}); var players=pls[0],setPlayers=pls[1];
+  var subS=useState(function(){return loadLS(SUBS_KEY,[]);}); var subs=subS[0],setSubs=subS[1];
+  var pls=useState(function(){return loadLS(PLAYERS_KEY,DEFAULT_PLAYERS);}); var players=pls[0],setPlayers=pls[1];
 
   function handleSubmit(f){
     var sub=Object.assign({},f,{timestamp:nowTime()});
     var updated=subs.filter(function(s){return s.player!==f.player;}).concat([sub]);
-    setSubs(updated);
-    saveSubs(updated);
+    setSubs(updated);saveLS(SUBS_KEY,updated);
     sendToSheet(sub);
   }
 
   function clearDay(){
-    if(window.confirm("Clear all submissions for today?")){setSubs([]);saveSubs([]);}
+    if(window.confirm("Clear all of today's submissions?")){setSubs([]);saveLS(SUBS_KEY,[]);}
   }
 
   function exportCSV(){
@@ -819,7 +745,7 @@ function App(){
     var rows=subs.map(function(s){
       var pd=s.painData||{};
       var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
-      return '"'+s.player+'","'+s.timestamp+'",'+s.fatigue+','+s.sleepQuality+',"'+(s.hoursSlept||'')+'",'+s.appetite+','+s.soreness+',"'+(pd.hasPain?"Yes":"No")+'","'+(pd.side||'')+'","'+areas+'","'+((pd.painType||[]).join("; "))+'","'+(pd.illness?"Yes":"No")+'","'+((pd.illnessTypes||[]).join("; "))+'","'+s.readyToTrain+'","'+(s.comments||"").replace(/"/g,"'")+'"';
+      return '"'+s.player+'","'+s.timestamp+'",'+s.fatigue+','+s.sleepQuality+',"'+(s.hoursSlept||"")+'",'+s.appetite+','+s.soreness+',"'+(pd.hasPain?"Yes":"No")+'","'+(pd.side||"")+'","'+areas+'","'+((pd.painType||[]).join("; "))+'","'+(pd.illness?"Yes":"No")+'","'+((pd.illnessTypes||[]).join("; "))+'","'+s.readyToTrain+'","'+(s.comments||"").replace(/"/g,"'")+'"';
     });
     var blob=new Blob([[h].concat(rows).join("\n")],{type:"text/csv"});
     var a=document.createElement("a");
@@ -829,31 +755,32 @@ function App(){
   }
 
   return (
-    <div style={{minHeight:"100vh",background:navy,color:white}}>
-      <nav style={{borderBottom:"1px solid #1e3a6e",padding:"12px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:10,background:navy}}>
+    <div style={{minHeight:"100vh",background:bg}}>
+      <nav style={{background:navy,borderBottom:"2px solid "+gold,
+        padding:"12px 18px",display:"flex",justifyContent:"space-between",
+        alignItems:"center",position:"sticky",top:0,zIndex:10}}>
         <span style={{fontFamily:DISP,fontWeight:700,fontSize:20,color:yellow,letterSpacing:2}}>AIK</span>
         <div style={{display:"flex",gap:6}}>
-          {[["player","Check-in"],["staff","Staff"]].map(function(item){
+          {[["player","Check-in"],["staff","Staff 🔒"]].map(function(item){
             return (
               <button key={item[0]} onClick={function(){setView(item[0]);}} style={{
-                padding:"7px 16px",borderRadius:8,
+                padding:"7px 14px",borderRadius:8,
                 border:"1.5px solid "+(view===item[0]?yellow:"#1e3a6e"),
                 background:view===item[0]?yellow:"transparent",
-                color:view===item[0]?navy:muted,
+                color:view===item[0]?navy:"#7b93bc",
                 fontWeight:700,cursor:"pointer",fontSize:13
               }}>{item[1]}</button>
             );
           })}
         </div>
       </nav>
-      <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px"}}>
-        {view==="player"?(
-          <PlayerFlow players={players} subs={subs} onSubmit={handleSubmit}/>
-        ):(
-          unlocked?
-            <Dashboard subs={subs} players={players} onExport={exportCSV} onPlayersUpdate={setPlayers} onClearDay={clearDay}/>:
-            <PinScreen onUnlock={function(){setUnlocked(true);}}/>
-        )}
+      <div style={{maxWidth:480,margin:"0 auto",padding:"20px 14px 40px"}}>
+        {view==="player"
+          ? <PlayerFlow players={players} subs={subs} onSubmit={handleSubmit}/>
+          : (unlocked
+              ? <Dashboard subs={subs} players={players} onExport={exportCSV} onPlayersUpdate={setPlayers} onClearDay={clearDay}/>
+              : <PinScreen onUnlock={function(){setUnlocked(true);}}/>)
+        }
       </div>
     </div>
   );
