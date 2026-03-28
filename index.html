@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>AIK – Wellness Check-in</title>
+  <title>AIK - Wellness Check-in</title>
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -19,19 +19,14 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect } = React;
+var useState = React.useState;
+var useEffect = React.useEffect;
 
-// ═══════════════════════════════════════════════
-//  CONFIG  — edit these two lines
-// ═══════════════════════════════════════════════
-const PIN = "1234";
-const SHEET_WEBHOOK_URL = ""; // Paste your Google Apps Script URL here to enable auto-submit
+var PIN = "1234";
+var SHEET_URL = "";
+var STORAGE_KEY = "aik-wellness-players";
 
-// ═══════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════
-const STORAGE_KEY = "aik-wellness-players";
-const DEFAULT_PLAYERS = [
+var DEFAULT_PLAYERS = [
   "Abdihakim Ali","Adrian Helm","Ahmad Faqa","Amel Mujanic","Andreas Redkin",
   "Aron Csongvai","Axel Kouame","Bersant Celina","Charlie Pavey","Dino Besirovic",
   "Erik Flataker","Eskil Edh","Fredrik Nissen","Ibrahim Cisse","Johan Hove",
@@ -40,227 +35,283 @@ const DEFAULT_PLAYERS = [
   "Sixten Gustafsson","Sotirios Papagiannopoulos","Stanley Wilson","Taha Ayari",
   "Victor Andersson","Yannick Geiger","Zadok Yohanna"
 ];
-const PAIRED_MUSCLES = ["Shoulder","Upper Arm","Elbow","Forearm","Wrist / Hand","Hip / Groin","Quad","Hamstring","Knee","Calf","Shin","Ankle","Foot"];
-const CENTRAL_AREAS  = ["Head","Neck","Upper Back","Lower Back","Chest","Abdomen"];
-const ILLNESS_TYPES  = ["Cold / Flu","Sore Throat","Stomach / GI","Fever","Fatigue / Low energy","Allergy","Other"];
-const PAIN_TYPES     = ["Sharp","Dull","Aching","Tightness","Burning","Other"];
 
-const C = {
-  navy:"#0f1f3d",navyMid:"#1a3260",yellow:"#FFE135",gold:"#8B7340",goldLight:"#c9a84c",
-  bg:"#f0f3f8",card:"#ffffff",border:"#dce3ef",muted:"#64748b",faint:"#f4f6fb",
-  red:"#dc2626",amber:"#d97706",green:"#16a34a"
-};
-const DISP = "'Oswald','Impact',sans-serif";
-const card = {background:C.card,borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.08)",marginBottom:14};
+var PAIRED = ["Shoulder","Upper Arm","Elbow","Forearm","Wrist / Hand","Hip / Groin","Quad","Hamstring","Knee","Calf","Shin","Ankle","Foot"];
+var CENTRAL = ["Head","Neck","Upper Back","Lower Back","Chest","Abdomen"];
+var ILLNESS = ["Cold / Flu","Sore Throat","Stomach / GI","Fever","Fatigue / Low energy","Allergy","Other"];
+var PAIN_T = ["Sharp","Dull","Aching","Tightness","Burning","Other"];
 
-const scoreCol = v => v>=4?C.green:v===3?C.amber:C.red;
-const isFlagged = s => s.fatigue<=2||s.sleep<=2||s.soreness<=2||s.appetite<=2||s.painData?.hasPain||s.painData?.illness||s.readyToTrain==="no";
-const avg = (subs,key) => subs.length?(subs.reduce((a,s)=>a+s[key],0)/subs.length).toFixed(1):"—";
-const today = () => new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-const nowTime = () => new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+var navy="#0f1f3d", navyMid="#1a3260", yellow="#FFE135", goldLight="#c9a84c", gold="#8B7340";
+var bg="#f0f3f8", white="#ffffff", border="#dce3ef", muted="#64748b", faint="#f4f6fb";
+var red="#dc2626", amber="#d97706", green="#16a34a";
+var DISP = "'Oswald','Impact',sans-serif";
 
-// ── Storage (localStorage) ────────────────────────────────
-const loadPlayers = () => {
-  try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : DEFAULT_PLAYERS; }
-  catch { return DEFAULT_PLAYERS; }
-};
-const savePlayers = p => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch {} };
+var cardStyle = {background:white,borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.08)",marginBottom:14};
 
-// ── Google Sheets webhook ─────────────────────────────────
-const sendToSheet = async (sub) => {
-  if (!SHEET_WEBHOOK_URL) return;
-  const pd = sub.painData||{};
-  try {
-    await fetch(SHEET_WEBHOOK_URL, {
-      method:"POST", mode:"no-cors",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        player:sub.player, timestamp:sub.timestamp,
-        fatigue:sub.fatigue, sleepQuality:sub.sleepQuality, hoursSlept:sub.hoursSlept||"",
-        appetite:sub.appetite, soreness:sub.soreness,
-        pain:pd.hasPain?"Yes":"No", painSide:pd.side||"",
-        painAreas:[...(pd.muscles||[]),...(pd.central||[])].join("; "),
-        painType:(pd.painType||[]).join("; "),
-        illness:pd.illness?"Yes":"No", illnessTypes:(pd.illnessTypes||[]).join("; "),
-        readyToTrain:sub.readyToTrain, comments:sub.comments||""
-      })
-    });
-  } catch(e) { console.warn("Sheet webhook failed:", e); }
-};
+function scoreCol(v) { return v >= 4 ? green : v === 3 ? amber : red; }
 
-// ═══════════════════════════════════════════════
-//  PRIMITIVES
-// ═══════════════════════════════════════════════
-function Scale({value,onChange,lo,hi}) {
+function isFlagged(s) {
+  var pd = s.painData || {};
+  return s.fatigue <= 2 || s.sleepQuality <= 2 || s.soreness <= 2 || s.appetite <= 2 || pd.hasPain || pd.illness || s.readyToTrain === "no";
+}
+
+function avg(subs, key) {
+  if (!subs.length) return "0";
+  return (subs.reduce(function(a,s){ return a + s[key]; }, 0) / subs.length).toFixed(1);
+}
+
+function todayStr() {
+  return new Date().toLocaleDateString("en-GB", {weekday:"long",day:"numeric",month:"long",year:"numeric"});
+}
+
+function nowTime() {
+  return new Date().toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"});
+}
+
+function loadPlayers() {
+  try { var s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : DEFAULT_PLAYERS; }
+  catch(e) { return DEFAULT_PLAYERS; }
+}
+
+function savePlayers(p) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch(e) {}
+}
+
+function sendToSheet(sub) {
+  if (!SHEET_URL) return;
+  var pd = sub.painData || {};
+  var areas = (pd.muscles || []).concat(pd.central || []).join("; ");
+  fetch(SHEET_URL, {
+    method:"POST", mode:"no-cors",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      player:sub.player, timestamp:sub.timestamp,
+      fatigue:sub.fatigue, sleepQuality:sub.sleepQuality, hoursSlept:sub.hoursSlept || "",
+      appetite:sub.appetite, soreness:sub.soreness,
+      pain:pd.hasPain?"Yes":"No", painSide:pd.side || "",
+      painAreas:areas, painType:(pd.painType || []).join("; "),
+      illness:pd.illness?"Yes":"No", illnessTypes:(pd.illnessTypes || []).join("; "),
+      readyToTrain:sub.readyToTrain, comments:sub.comments || ""
+    })
+  }).catch(function(e){ console.warn("Sheet error", e); });
+}
+
+// ── Primitives ────────────────────────────────────────────
+function Scale(props) {
+  var value = props.value, onChange = props.onChange, lo = props.lo, hi = props.hi;
   return (
     <div>
       <div style={{display:"flex",gap:7}}>
-        {[1,2,3,4,5].map(v=>{const col=scoreCol(v),sel=value===v;return(
-          <button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:"13px 0",borderRadius:8,
-            border:`2px solid ${sel?col:C.border}`,background:sel?col:C.faint,
-            color:sel?"#fff":C.muted,fontWeight:700,fontSize:16,cursor:"pointer"}}>{v}</button>
-        );})}
+        {[1,2,3,4,5].map(function(v) {
+          var col = scoreCol(v), sel = value === v;
+          return (
+            <button key={v} onClick={function(){ onChange(v); }} style={{flex:1,padding:"13px 0",borderRadius:8,
+              border:"2px solid " + (sel?col:border), background:sel?col:faint,
+              color:sel?"#fff":muted, fontWeight:700, fontSize:16, cursor:"pointer"}}>{v}</button>
+          );
+        })}
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:5,fontSize:11,color:C.muted}}>
-        <span>1 — {lo}</span><span>5 — {hi}</span>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:5,fontSize:11,color:muted}}>
+        <span>{"1 — " + lo}</span><span>{"5 — " + hi}</span>
       </div>
     </div>
   );
 }
 
-function Choices({value,onChange,options}) {
+function Choices(props) {
+  var value = props.value, onChange = props.onChange, options = props.options;
   return (
     <div style={{display:"flex",gap:8}}>
-      {options.map(([v,label,col])=>(
-        <button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:"11px 6px",borderRadius:8,
-          border:`2px solid ${value===v?col:C.border}`,background:value===v?col:C.faint,
-          color:value===v?"#fff":C.muted,fontWeight:600,fontSize:13,cursor:"pointer"}}>{label}</button>
-      ))}
+      {options.map(function(opt) {
+        var v = opt[0], label = opt[1], col = opt[2], sel = value === v;
+        return (
+          <button key={v} onClick={function(){ onChange(v); }} style={{flex:1,padding:"11px 6px",borderRadius:8,
+            border:"2px solid " + (sel?col:border), background:sel?col:faint,
+            color:sel?"#fff":muted, fontWeight:600, fontSize:13, cursor:"pointer"}}>{label}</button>
+        );
+      })}
     </div>
   );
 }
 
-function Q({n,title,hint,children}) {
+function Q(props) {
   return (
     <div style={{marginBottom:26}}>
       <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:8}}>
-        <span style={{width:3,height:16,background:C.yellow,borderRadius:2,display:"inline-block",marginRight:2,flexShrink:0}}/>
-        <span style={{fontWeight:700,fontSize:14,color:C.navy}}>{n}. {title}</span>
-        {hint&&<span style={{fontWeight:400,fontSize:12,color:C.muted}}>{hint}</span>}
+        <span style={{width:3,height:16,background:yellow,borderRadius:2,display:"inline-block",marginRight:2,flexShrink:0}}/>
+        <span style={{fontWeight:700,fontSize:14,color:navy}}>{props.n + ". " + props.title}</span>
+        {props.hint && <span style={{fontWeight:400,fontSize:12,color:muted}}>{props.hint}</span>}
       </div>
-      {children}
+      {props.children}
     </div>
   );
 }
 
-function Chip({label,selected,color,onClick}) {
+function Chip(props) {
+  var sel = props.selected, col = props.color || navy;
   return (
-    <button onClick={onClick} style={{padding:"6px 13px",
-      border:`1.5px solid ${selected?(color||C.navy):C.border}`,borderRadius:20,
-      background:selected?(color?color+"18":"#1a326018"):C.faint,
-      color:selected?(color||C.navy):C.muted,
-      fontSize:12,cursor:"pointer",fontWeight:selected?700:400}}>
-      {label}
-    </button>
+    <button onClick={props.onClick} style={{padding:"6px 13px",
+      border:"1.5px solid " + (sel ? col : border), borderRadius:20,
+      background: sel ? col + "18" : faint,
+      color: sel ? col : muted,
+      fontSize:12, cursor:"pointer", fontWeight:sel?700:400}}>{props.label}</button>
   );
 }
 
-function Label({children}) {
-  return <div style={{fontSize:11,fontWeight:700,color:C.muted,marginBottom:7,textTransform:"uppercase",letterSpacing:0.5}}>{children}</div>;
+function Lbl(props) {
+  return <div style={{fontSize:11,fontWeight:700,color:muted,marginBottom:7,textTransform:"uppercase",letterSpacing:0.5}}>{props.children}</div>;
 }
 
-function Tag({col,children}) {
-  return <span style={{background:col+"18",color:col,padding:"4px 10px",borderRadius:16,fontSize:12,fontWeight:700,border:`1px solid ${col}30`}}>{children}</span>;
+function Tag(props) {
+  var col = props.col;
+  return <span style={{background:col+"18",color:col,padding:"4px 10px",borderRadius:16,fontSize:12,fontWeight:700,border:"1px solid "+col+"30"}}>{props.children}</span>;
 }
 
-function ScorePill({label,value}) {
-  const col=typeof value==="number"?scoreCol(value):C.muted;
+function ScorePill(props) {
+  var col = typeof props.value === "number" ? scoreCol(props.value) : muted;
   return (
-    <div style={{textAlign:"center",background:col+"18",borderRadius:8,padding:"10px 6px",border:`1.5px solid ${col}30`}}>
-      <div style={{fontSize:9,color:col,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5}}>{label}</div>
-      <div style={{fontSize:22,fontWeight:900,color:col,lineHeight:1.2,marginTop:3}}>{value}</div>
+    <div style={{textAlign:"center",background:col+"18",borderRadius:8,padding:"10px 6px",border:"1.5px solid "+col+"30"}}>
+      <div style={{fontSize:9,color:col,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5}}>{props.label}</div>
+      <div style={{fontSize:22,fontWeight:900,color:col,lineHeight:1.2,marginTop:3}}>{props.value}</div>
     </div>
   );
 }
 
-// ── Simple SVG bar chart (no library needed) ──────────────
-function BarChart({data}) {
+function SimpleBar(props) {
+  var data = props.data;
   if (!data.length) return null;
-  const KEYS=[{k:"Fatigue",c:"#3b82f6"},{k:"Sleep",c:"#8b5cf6"},{k:"Appetite",c:C.green},{k:"Soreness",c:C.amber}];
-  const H=130,bW=9,gap=3,grpGap=14,grpW=KEYS.length*(bW+gap)-gap+grpGap;
-  const W=Math.max(data.length*grpW+20,300);
+  var KEYS = [{k:"Fatigue",c:"#3b82f6"},{k:"Sleep",c:"#8b5cf6"},{k:"Appetite",c:green},{k:"Soreness",c:amber}];
+  var H=130, bW=9, gap=3, grpGap=14;
+  var grpW = KEYS.length * (bW + gap) - gap + grpGap;
+  var W = Math.max(data.length * grpW + 20, 300);
   return (
     <div style={{overflowX:"auto"}}>
       <svg width={W} height={H+28} style={{display:"block",margin:"0 auto"}}>
-        {data.map((d,gi)=>KEYS.map(({k,c},ki)=>{
-          const bh=Math.round((d[k]/5)*H),x=10+gi*grpW+ki*(bW+gap),y=H-bh;
-          return <rect key={k} x={x} y={y} width={bW} height={bh} fill={c} rx={2}/>;
-        }))}
-        {data.map((d,gi)=>(
-          <text key={gi} x={10+gi*grpW+grpW/2-grpGap/2} y={H+16} textAnchor="middle" fontSize={8} fill={C.muted}>{d.name}</text>
-        ))}
-        <line x1={10} y1={H} x2={W-10} y2={H} stroke={C.border} strokeWidth={1}/>
+        {data.map(function(d, gi) {
+          return KEYS.map(function(kobj, ki) {
+            var bh = Math.round((d[kobj.k] / 5) * H);
+            var x = 10 + gi * grpW + ki * (bW + gap);
+            var y = H - bh;
+            return <rect key={kobj.k} x={x} y={y} width={bW} height={bh} fill={kobj.c} rx={2}/>;
+          });
+        })}
+        {data.map(function(d, gi) {
+          return <text key={gi} x={10 + gi * grpW + grpW/2 - grpGap/2} y={H+16} textAnchor="middle" fontSize={8} fill={muted}>{d.name}</text>;
+        })}
+        <line x1={10} y1={H} x2={W-10} y2={H} stroke={border} strokeWidth={1}/>
       </svg>
-      <div style={{display:"flex",gap:14,justifyContent:"center",fontSize:11,color:C.muted,marginTop:4}}>
-        {KEYS.map(({k,c})=><span key={k} style={{display:"flex",alignItems:"center",gap:4}}>
-          <span style={{width:10,height:10,background:c,borderRadius:2,display:"inline-block"}}/>{k}
-        </span>)}
+      <div style={{display:"flex",gap:14,justifyContent:"center",fontSize:11,color:muted,marginTop:4}}>
+        {KEYS.map(function(kobj) {
+          return (
+            <span key={kobj.k} style={{display:"flex",alignItems:"center",gap:4}}>
+              <span style={{width:10,height:10,background:kobj.c,borderRadius:2,display:"inline-block"}}/>
+              {kobj.k}
+            </span>
+          );
+        })}
       </div>
-      <div style={{fontSize:11,color:C.muted,textAlign:"center",marginTop:4,fontStyle:"italic"}}>Higher = better for all metrics</div>
+      <div style={{fontSize:11,color:muted,textAlign:"center",marginTop:4,fontStyle:"italic"}}>Higher = better for all metrics</div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════
-//  PAIN SELECTOR
-// ═══════════════════════════════════════════════
-function PainSelector({painData,onChange}) {
-  const set=(k,v)=>onChange({...painData,[k]:v});
-  const toggleArr=(k,item)=>{const a=painData[k]||[];set(k,a.includes(item)?a.filter(x=>x!==item):[...a,item]);};
-  const hasSided=["left","right","both"].includes(painData.side);
+// ── Pain Selector ─────────────────────────────────────────
+function PainSelector(props) {
+  var painData = props.painData, onChange = props.onChange;
+
+  function set(k, v) {
+    var next = {};
+    Object.keys(painData).forEach(function(key){ next[key] = painData[key]; });
+    next[k] = v;
+    onChange(next);
+  }
+
+  function toggleArr(k, item) {
+    var arr = painData[k] || [];
+    var next = arr.indexOf(item) >= 0 ? arr.filter(function(x){ return x !== item; }) : arr.concat([item]);
+    set(k, next);
+  }
+
+  var hasSided = painData.side === "left" || painData.side === "right" || painData.side === "both";
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* Pain */}
-      <div style={{background:C.faint,borderRadius:10,padding:14,border:`1px solid ${C.border}`}}>
+      <div style={{background:faint,borderRadius:10,padding:14,border:"1px solid "+border}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:painData.hasPain?14:0}}>
-          <span style={{fontWeight:700,fontSize:13,color:C.navy}}>⚠️ Pain / Discomfort</span>
+          <span style={{fontWeight:700,fontSize:13,color:navy}}>Pain / Discomfort</span>
           <Choices value={painData.hasPain?"yes":"no"}
-            onChange={v=>onChange({...painData,hasPain:v==="yes",side:null,muscles:[],central:[],painType:[]})}
-            options={[["yes","Yes",C.red],["no","No",C.green]]}/>
+            onChange={function(v){
+              onChange({hasPain:v==="yes",side:null,muscles:[],central:[],painType:[],illness:painData.illness,illnessTypes:painData.illnessTypes});
+            }}
+            options={[["yes","Yes",red],["no","No",green]]}/>
         </div>
-        {painData.hasPain&&(
+        {painData.hasPain && (
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <div>
-              <Label>Side affected</Label>
+              <Lbl>Side affected</Lbl>
               <div style={{display:"flex",gap:7}}>
-                {[["left","← Left"],["both","Both"],["right","Right →"],["central","Central"]].map(([v,l])=>{
-                  const sel=painData.side===v;
-                  return <button key={v} onClick={()=>set("side",painData.side===v?null:v)} style={{flex:1,padding:"9px 4px",borderRadius:8,
-                    border:`2px solid ${sel?C.red:C.border}`,background:sel?C.red+"18":C.card,
-                    color:sel?C.red:C.muted,fontWeight:600,fontSize:12,cursor:"pointer"}}>{l}</button>;
+                {[["left","Left"],["both","Both"],["right","Right"],["central","Central"]].map(function(pair) {
+                  var v = pair[0], l = pair[1], sel = painData.side === v;
+                  return (
+                    <button key={v} onClick={function(){ set("side", painData.side === v ? null : v); }}
+                      style={{flex:1,padding:"9px 4px",borderRadius:8,
+                        border:"2px solid "+(sel?red:border),
+                        background:sel?red+"18":white,
+                        color:sel?red:muted,fontWeight:600,fontSize:12,cursor:"pointer"}}>{l}</button>
+                  );
                 })}
               </div>
             </div>
-            {hasSided&&(
+            {hasSided && (
               <div>
-                <Label>Muscle / Area</Label>
+                <Lbl>Muscle / Area</Lbl>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {PAIRED_MUSCLES.map(m=><Chip key={m} label={m} selected={(painData.muscles||[]).includes(m)} color={C.red} onClick={()=>toggleArr("muscles",m)}/>)}
+                  {PAIRED.map(function(m) {
+                    return <Chip key={m} label={m} selected={(painData.muscles||[]).indexOf(m)>=0} color={red} onClick={function(){ toggleArr("muscles",m); }}/>;
+                  })}
                 </div>
               </div>
             )}
-            {painData.side==="central"&&(
+            {painData.side === "central" && (
               <div>
-                <Label>Area</Label>
+                <Lbl>Area</Lbl>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {CENTRAL_AREAS.map(m=><Chip key={m} label={m} selected={(painData.central||[]).includes(m)} color={C.red} onClick={()=>toggleArr("central",m)}/>)}
+                  {CENTRAL.map(function(m) {
+                    return <Chip key={m} label={m} selected={(painData.central||[]).indexOf(m)>=0} color={red} onClick={function(){ toggleArr("central",m); }}/>;
+                  })}
                 </div>
               </div>
             )}
-            {painData.side&&(
+            {painData.side && (
               <div>
-                <Label>Type of pain</Label>
+                <Lbl>Type of pain</Lbl>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {PAIN_TYPES.map(t=><Chip key={t} label={t} selected={(painData.painType||[]).includes(t)} color={C.red} onClick={()=>toggleArr("painType",t)}/>)}
+                  {PAIN_T.map(function(t) {
+                    return <Chip key={t} label={t} selected={(painData.painType||[]).indexOf(t)>=0} color={red} onClick={function(){ toggleArr("painType",t); }}/>;
+                  })}
                 </div>
               </div>
             )}
           </div>
         )}
       </div>
-      {/* Illness */}
-      <div style={{background:C.faint,borderRadius:10,padding:14,border:`1px solid ${C.border}`}}>
+
+      <div style={{background:faint,borderRadius:10,padding:14,border:"1px solid "+border}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:painData.illness?14:0}}>
-          <span style={{fontWeight:700,fontSize:13,color:C.navy}}>🤒 Illness / Feeling unwell</span>
+          <span style={{fontWeight:700,fontSize:13,color:navy}}>Illness / Feeling unwell</span>
           <Choices value={painData.illness?"yes":"no"}
-            onChange={v=>onChange({...painData,illness:v==="yes",illnessTypes:[]})}
-            options={[["yes","Yes",C.red],["no","No",C.green]]}/>
+            onChange={function(v){
+              onChange({hasPain:painData.hasPain,side:painData.side,muscles:painData.muscles,central:painData.central,painType:painData.painType,illness:v==="yes",illnessTypes:[]});
+            }}
+            options={[["yes","Yes",red],["no","No",green]]}/>
         </div>
-        {painData.illness&&(
+        {painData.illness && (
           <div>
-            <Label>Type (select all that apply)</Label>
+            <Lbl>Type (select all that apply)</Lbl>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {ILLNESS_TYPES.map(t=><Chip key={t} label={t} selected={(painData.illnessTypes||[]).includes(t)} color={C.amber} onClick={()=>toggleArr("illnessTypes",t)}/>)}
+              {ILLNESS.map(function(t) {
+                return <Chip key={t} label={t} selected={(painData.illnessTypes||[]).indexOf(t)>=0} color={amber} onClick={function(){ toggleArr("illnessTypes",t); }}/>;
+              })}
             </div>
           </div>
         )}
@@ -269,304 +320,404 @@ function PainSelector({painData,onChange}) {
   );
 }
 
-// ═══════════════════════════════════════════════
-//  PLAYER FORM
-// ═══════════════════════════════════════════════
-function PlayerForm({onSubmit,players}) {
-  const emptyPain={hasPain:false,side:null,muscles:[],central:[],painType:[],illness:false,illnessTypes:[]};
-  const [f,setF]=useState({player:"",fatigue:null,sleepQuality:null,hoursSlept:"",appetite:null,soreness:null,painData:emptyPain,comments:"",readyToTrain:null});
-  const set=(k,v)=>setF(p=>({...p,[k]:v}));
-  const valid=f.player&&f.fatigue&&f.sleepQuality&&f.appetite&&f.soreness&&f.painData.hasPain!==undefined&&f.painData.illness!==undefined&&f.readyToTrain!==null;
+// ── Player Form ───────────────────────────────────────────
+function PlayerForm(props) {
+  var players = props.players, onSubmit = props.onSubmit;
+  var emptyPain = {hasPain:false,side:null,muscles:[],central:[],painType:[],illness:false,illnessTypes:[]};
+  var s = useState({player:"",fatigue:null,sleepQuality:null,hoursSlept:"",appetite:null,soreness:null,painData:emptyPain,comments:"",readyToTrain:null});
+  var f = s[0], setF = s[1];
+
+  function set(k, v) {
+    setF(function(prev) {
+      var next = {};
+      Object.keys(prev).forEach(function(key){ next[key] = prev[key]; });
+      next[k] = v;
+      return next;
+    });
+  }
+
+  var valid = f.player && f.fatigue && f.sleepQuality && f.appetite && f.soreness && f.painData.hasPain !== undefined && f.painData.illness !== undefined && f.readyToTrain !== null;
+
+  var hours = ["<5","5","5.5","6","6.5","7","7.5","8","8.5","9","9+"];
+
   return (
     <div>
-      <div style={{textAlign:"center",marginBottom:22,background:C.navy,borderRadius:14,padding:"22px 16px",boxShadow:"0 4px 16px rgba(15,31,61,0.18)"}}>
-        <div style={{fontFamily:DISP,fontSize:38,fontWeight:700,color:C.yellow,letterSpacing:2,lineHeight:1}}>AIK</div>
-        <div style={{color:C.goldLight,fontSize:13,fontWeight:600,marginTop:6,letterSpacing:1}}>WELLNESS CHECK-IN</div>
-        <div style={{color:"#7b93bc",fontSize:12,marginTop:5}}>{today()}</div>
+      <div style={{textAlign:"center",marginBottom:22,background:navy,borderRadius:14,padding:"22px 16px",boxShadow:"0 4px 16px rgba(15,31,61,0.18)"}}>
+        <div style={{fontFamily:DISP,fontSize:38,fontWeight:700,color:yellow,letterSpacing:2,lineHeight:1}}>AIK</div>
+        <div style={{color:goldLight,fontSize:13,fontWeight:600,marginTop:6,letterSpacing:1}}>WELLNESS CHECK-IN</div>
+        <div style={{color:"#7b93bc",fontSize:12,marginTop:5}}>{todayStr()}</div>
       </div>
-      <div style={card}>
-        <div style={{background:C.navy+"0d",borderRadius:9,padding:"10px 14px",marginBottom:20,fontSize:12,color:C.muted,borderLeft:`3px solid ${C.yellow}`}}>
-          All ratings: <strong style={{color:C.green}}>5 = best</strong> — <strong style={{color:C.red}}>1 = worst</strong>
+
+      <div style={cardStyle}>
+        <div style={{background:navy+"18",borderRadius:9,padding:"10px 14px",marginBottom:20,fontSize:12,color:muted,borderLeft:"3px solid "+yellow}}>
+          All ratings: <strong style={{color:green}}>5 = best</strong> — <strong style={{color:red}}>1 = worst</strong>
         </div>
+
         <Q n="1" title="Your name">
-          <select value={f.player} onChange={e=>set("player",e.target.value)} style={{width:"100%",padding:"12px 14px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:15,color:f.player?C.navy:C.muted,background:C.faint}}>
-            <option value="">Select your name…</option>
-            {players.map(p=><option key={p} value={p}>{p}</option>)}
+          <select value={f.player} onChange={function(e){ set("player", e.target.value); }}
+            style={{width:"100%",padding:"12px 14px",borderRadius:8,border:"1.5px solid "+border,fontSize:15,color:f.player?navy:muted,background:faint}}>
+            <option value="">Select your name...</option>
+            {players.map(function(p){ return <option key={p} value={p}>{p}</option>; })}
           </select>
         </Q>
+
         <Q n="2" title="Fatigue" hint="How energised do you feel?">
-          <Scale value={f.fatigue} onChange={v=>set("fatigue",v)} lo="Extremely tired" hi="Fully energised"/>
+          <Scale value={f.fatigue} onChange={function(v){ set("fatigue",v); }} lo="Extremely tired" hi="Fully energised"/>
         </Q>
+
         <Q n="3" title="Sleep Quality" hint="How well did you sleep?">
-          <Scale value={f.sleepQuality} onChange={v=>set("sleepQuality",v)} lo="Very poor" hi="Excellent"/>
+          <Scale value={f.sleepQuality} onChange={function(v){ set("sleepQuality",v); }} lo="Very poor" hi="Excellent"/>
           <div style={{marginTop:14}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,marginBottom:8}}>Hours slept <span style={{fontWeight:400}}>(optional)</span></div>
+            <div style={{fontSize:12,fontWeight:600,color:muted,marginBottom:8}}>Hours slept (optional)</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {["<5","5","5.5","6","6.5","7","7.5","8","8.5","9","9+"].map(h=>(
-                <button key={h} onClick={()=>set("hoursSlept",f.hoursSlept===h?"":h)} style={{padding:"7px 12px",borderRadius:8,
-                  border:`1.5px solid ${f.hoursSlept===h?C.navy:C.border}`,
-                  background:f.hoursSlept===h?C.navy:C.faint,
-                  color:f.hoursSlept===h?"#fff":C.muted,fontSize:13,fontWeight:600,cursor:"pointer"}}>{h}</button>
-              ))}
+              {hours.map(function(h) {
+                var sel = f.hoursSlept === h;
+                return (
+                  <button key={h} onClick={function(){ set("hoursSlept", sel?"":h); }}
+                    style={{padding:"7px 12px",borderRadius:8,
+                      border:"1.5px solid "+(sel?navy:border),
+                      background:sel?navy:faint,
+                      color:sel?"#fff":muted,fontSize:13,fontWeight:600,cursor:"pointer"}}>{h}</button>
+                );
+              })}
             </div>
           </div>
         </Q>
+
         <Q n="4" title="Appetite" hint="How is your appetite today?">
-          <Scale value={f.appetite} onChange={v=>set("appetite",v)} lo="Very poor" hi="Very good"/>
+          <Scale value={f.appetite} onChange={function(v){ set("appetite",v); }} lo="Very poor" hi="Very good"/>
         </Q>
+
         <Q n="5" title="Muscle Soreness" hint="How do your muscles feel?">
-          <Scale value={f.soreness} onChange={v=>set("soreness",v)} lo="Very sore" hi="No soreness"/>
+          <Scale value={f.soreness} onChange={function(v){ set("soreness",v); }} lo="Very sore" hi="No soreness"/>
         </Q>
-        <Q n="6" title="Pain, Discomfort & Illness">
-          <PainSelector painData={f.painData} onChange={v=>set("painData",v)}/>
+
+        <Q n="6" title="Pain, Discomfort and Illness">
+          <PainSelector painData={f.painData} onChange={function(v){ set("painData",v); }}/>
         </Q>
+
         <Q n="7" title="Comments" hint="Sleep, stress, travel, anything else?">
-          <textarea value={f.comments} onChange={e=>set("comments",e.target.value)}
+          <textarea value={f.comments} onChange={function(e){ set("comments",e.target.value); }}
             placeholder="Anything we should know about? (optional)"
-            style={{width:"100%",padding:"11px 14px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:14,minHeight:70,resize:"vertical",color:C.navy,background:C.faint}}/>
+            style={{width:"100%",padding:"11px 14px",borderRadius:8,border:"1.5px solid "+border,fontSize:14,minHeight:70,resize:"vertical",color:navy,background:faint}}/>
         </Q>
+
         <Q n="8" title="Are you ready to train today?">
-          <Choices value={f.readyToTrain} onChange={v=>set("readyToTrain",v)} options={[["yes","✅ Yes",C.green],["partial","⚡ Partially",C.amber],["no","❌ No",C.red]]}/>
+          <Choices value={f.readyToTrain} onChange={function(v){ set("readyToTrain",v); }}
+            options={[["yes","Yes - Ready",green],["partial","Partially",amber],["no","No",red]]}/>
         </Q>
-        <button onClick={()=>valid&&onSubmit(f)} style={{width:"100%",padding:15,background:valid?C.navy:C.border,color:valid?C.yellow:C.muted,
-          border:"none",borderRadius:10,fontFamily:DISP,fontSize:16,fontWeight:600,letterSpacing:1,cursor:valid?"pointer":"default",marginTop:4}}>
+
+        <button onClick={function(){ if(valid) onSubmit(f); }}
+          style={{width:"100%",padding:15,background:valid?navy:border,color:valid?yellow:muted,
+            border:"none",borderRadius:10,fontFamily:DISP,fontSize:16,fontWeight:600,letterSpacing:1,cursor:valid?"pointer":"default",marginTop:4}}>
           SUBMIT CHECK-IN
         </button>
-        {!valid&&<p style={{textAlign:"center",color:C.muted,fontSize:12,margin:"8px 0 0"}}>Please answer all required questions</p>}
+        {!valid && <p style={{textAlign:"center",color:muted,fontSize:12,margin:"8px 0 0"}}>Please answer all required questions</p>}
       </div>
     </div>
   );
 }
 
-function SuccessScreen({player,onReset}) {
+function SuccessScreen(props) {
+  var player = props.player, onReset = props.onReset;
   return (
     <div style={{textAlign:"center",padding:"64px 24px"}}>
-      <div style={{width:80,height:80,background:C.navy,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",fontSize:38}}>✅</div>
-      <div style={{fontFamily:DISP,fontSize:30,fontWeight:700,color:C.navy,letterSpacing:1}}>CHECK-IN DONE</div>
-      <p style={{color:C.muted,margin:"8px 0 32px"}}>Thanks {player.split(" ")[0]}, have a great session! 💪</p>
-      <button onClick={onReset} style={{padding:"12px 32px",background:C.navy,color:C.yellow,border:"none",borderRadius:8,fontFamily:DISP,fontSize:16,fontWeight:600,letterSpacing:1,cursor:"pointer"}}>SUBMIT ANOTHER</button>
+      <div style={{width:80,height:80,background:navy,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",fontSize:38}}>✅</div>
+      <div style={{fontFamily:DISP,fontSize:30,fontWeight:700,color:navy,letterSpacing:1}}>CHECK-IN DONE</div>
+      <p style={{color:muted,margin:"8px 0 32px"}}>{"Thanks " + player.split(" ")[0] + ", have a great session!"}</p>
+      <button onClick={onReset} style={{padding:"12px 32px",background:navy,color:yellow,border:"none",borderRadius:8,fontFamily:DISP,fontSize:16,fontWeight:600,letterSpacing:1,cursor:"pointer"}}>SUBMIT ANOTHER</button>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════
-//  PIN SCREEN
-// ═══════════════════════════════════════════════
-function PinScreen({onUnlock}) {
-  const [p,setP]=useState(""), [err,setErr]=useState(false);
-  const check=()=>p===PIN?onUnlock():(setErr(true),setP(""));
+// ── PIN Screen ────────────────────────────────────────────
+function PinScreen(props) {
+  var onUnlock = props.onUnlock;
+  var ps = useState(""); var p = ps[0], setP = ps[1];
+  var es = useState(false); var err = es[0], setErr = es[1];
+  function check() {
+    if (p === PIN) { onUnlock(); }
+    else { setErr(true); setP(""); }
+  }
   return (
     <div style={{maxWidth:320,margin:"64px auto",textAlign:"center"}}>
-      <div style={{background:C.navy,borderRadius:14,padding:"28px 20px",marginBottom:20,boxShadow:"0 4px 16px rgba(15,31,61,0.18)"}}>
-        <div style={{fontFamily:DISP,fontSize:42,fontWeight:700,color:C.yellow,letterSpacing:3}}>AIK</div>
+      <div style={{background:navy,borderRadius:14,padding:"28px 20px",marginBottom:20,boxShadow:"0 4px 16px rgba(15,31,61,0.18)"}}>
+        <div style={{fontFamily:DISP,fontSize:42,fontWeight:700,color:yellow,letterSpacing:3}}>AIK</div>
         <div style={{color:"#7b93bc",fontSize:13,marginTop:4}}>Staff access only</div>
       </div>
-      <input type="password" value={p} onChange={e=>{setP(e.target.value);setErr(false);}} onKeyDown={e=>e.key==="Enter"&&check()}
+      <input type="password" value={p}
+        onChange={function(e){ setP(e.target.value); setErr(false); }}
+        onKeyDown={function(e){ if(e.key==="Enter") check(); }}
         placeholder="Enter PIN"
-        style={{width:"100%",padding:14,textAlign:"center",fontSize:22,letterSpacing:8,border:`2px solid ${err?C.red:C.border}`,borderRadius:8,outline:"none",marginBottom:8,background:C.faint,color:C.navy}}/>
-      {err&&<p style={{color:C.red,fontSize:13,margin:"0 0 10px"}}>Incorrect PIN. Try again.</p>}
-      <button onClick={check} style={{width:"100%",padding:13,background:C.navy,color:C.yellow,border:"none",borderRadius:8,fontFamily:DISP,fontSize:16,fontWeight:600,letterSpacing:1,cursor:"pointer",marginTop:6}}>UNLOCK DASHBOARD</button>
+        style={{width:"100%",padding:14,textAlign:"center",fontSize:22,letterSpacing:8,
+          border:"2px solid "+(err?red:border),borderRadius:8,outline:"none",marginBottom:8,background:faint,color:navy}}/>
+      {err && <p style={{color:red,fontSize:13,margin:"0 0 10px"}}>Incorrect PIN. Try again.</p>}
+      <button onClick={check} style={{width:"100%",padding:13,background:navy,color:yellow,border:"none",borderRadius:8,fontFamily:DISP,fontSize:16,fontWeight:600,letterSpacing:1,cursor:"pointer",marginTop:6}}>UNLOCK DASHBOARD</button>
       <p style={{fontSize:11,color:"#94a3b8",marginTop:12}}>Default PIN: 1234</p>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════
-//  ROSTER MANAGER
-// ═══════════════════════════════════════════════
-function RosterManager({players,onUpdate}) {
-  const [newName,setNewName]=useState(""), [search,setSearch]=useState(""), [confirm,setConfirm]=useState(null);
-  const sorted=[...players].sort((a,b)=>a.split(" ").pop().localeCompare(b.split(" ").pop()));
-  const filtered=sorted.filter(p=>p.toLowerCase().includes(search.toLowerCase()));
-  const save=updated=>{savePlayers(updated);onUpdate(updated);};
-  const add=()=>{const n=newName.trim();if(!n||players.includes(n))return;save([...players,n]);setNewName("");};
-  const remove=name=>{save(players.filter(p=>p!==name));setConfirm(null);};
+// ── Roster Manager ────────────────────────────────────────
+function RosterManager(props) {
+  var players = props.players, onUpdate = props.onUpdate;
+  var ns = useState(""); var newName = ns[0], setNewName = ns[1];
+  var ss = useState(""); var search = ss[0], setSearch = ss[1];
+  var cs = useState(null); var confirm = cs[0], setConfirm = cs[1];
+
+  var sorted = players.slice().sort(function(a,b){ return a.split(" ").pop().localeCompare(b.split(" ").pop()); });
+  var filtered = sorted.filter(function(p){ return p.toLowerCase().indexOf(search.toLowerCase()) >= 0; });
+
+  function save(updated) { savePlayers(updated); onUpdate(updated); }
+  function add() {
+    var n = newName.trim();
+    if (!n || players.indexOf(n) >= 0) return;
+    save(players.concat([n]));
+    setNewName("");
+  }
+  function remove(name) {
+    save(players.filter(function(p){ return p !== name; }));
+    setConfirm(null);
+  }
+
   return (
     <div>
-      <div style={{...card,marginBottom:14}}>
-        <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,fontSize:14,color:C.navy,marginBottom:12}}>ADD PLAYER</div>
+      <div style={{background:white,borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.08)",marginBottom:14}}>
+        <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,fontSize:14,color:navy,marginBottom:12}}>ADD PLAYER</div>
         <div style={{display:"flex",gap:8}}>
-          <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}
-            placeholder="Full name…"
-            style={{flex:1,padding:"10px 14px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:14,color:C.navy,background:C.faint,outline:"none"}}/>
-          <button onClick={add} style={{padding:"10px 18px",background:C.navy,color:C.yellow,border:"none",borderRadius:8,fontFamily:DISP,fontSize:14,fontWeight:600,letterSpacing:0.5,cursor:"pointer"}}>ADD</button>
+          <input value={newName} onChange={function(e){ setNewName(e.target.value); }}
+            onKeyDown={function(e){ if(e.key==="Enter") add(); }}
+            placeholder="Full name..."
+            style={{flex:1,padding:"10px 14px",borderRadius:8,border:"1.5px solid "+border,fontSize:14,color:navy,background:faint,outline:"none"}}/>
+          <button onClick={add} style={{padding:"10px 18px",background:navy,color:yellow,border:"none",borderRadius:8,fontFamily:DISP,fontSize:14,fontWeight:600,cursor:"pointer"}}>ADD</button>
         </div>
       </div>
-      <div style={card}>
+      <div style={cardStyle}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,fontSize:14,color:C.navy}}>SQUAD — {players.length} PLAYERS</div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
-            style={{padding:"7px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,background:C.faint,outline:"none",width:130}}/>
+          <div style={{fontFamily:DISP,fontWeight:600,fontSize:14,color:navy}}>{"SQUAD - " + players.length + " PLAYERS"}</div>
+          <input value={search} onChange={function(e){ setSearch(e.target.value); }} placeholder="Search..."
+            style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid "+border,fontSize:13,color:navy,background:faint,outline:"none",width:130}}/>
         </div>
-        {filtered.map(p=>(
-          <div key={p} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",
-            borderRadius:8,background:C.faint,border:`1px solid ${confirm===p?C.red:C.border}`,marginBottom:6}}>
-            <span style={{fontSize:14,color:C.navy,fontWeight:500}}>{p}</span>
-            {confirm===p?(
-              <div style={{display:"flex",gap:6}}>
-                <span style={{fontSize:12,color:C.red,fontWeight:600,alignSelf:"center"}}>Remove?</span>
-                <button onClick={()=>remove(p)} style={{padding:"5px 12px",background:C.red,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>Yes</button>
-                <button onClick={()=>setConfirm(null)} style={{padding:"5px 12px",background:C.border,color:C.muted,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>No</button>
-              </div>
-            ):(
-              <button onClick={()=>setConfirm(p)} style={{padding:"5px 10px",background:"transparent",color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,cursor:"pointer"}}>Remove</button>
-            )}
-          </div>
-        ))}
-        {filtered.length===0&&<div style={{textAlign:"center",color:C.muted,padding:24,fontSize:13}}>No players found</div>}
+        {filtered.map(function(p) {
+          return (
+            <div key={p} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+              padding:"10px 12px",borderRadius:8,background:faint,
+              border:"1px solid "+(confirm===p?red:border),marginBottom:6}}>
+              <span style={{fontSize:14,color:navy,fontWeight:500}}>{p}</span>
+              {confirm === p ? (
+                <div style={{display:"flex",gap:6}}>
+                  <span style={{fontSize:12,color:red,fontWeight:600,alignSelf:"center"}}>Remove?</span>
+                  <button onClick={function(){ remove(p); }} style={{padding:"5px 12px",background:red,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>Yes</button>
+                  <button onClick={function(){ setConfirm(null); }} style={{padding:"5px 12px",background:border,color:muted,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>No</button>
+                </div>
+              ) : (
+                <button onClick={function(){ setConfirm(p); }} style={{padding:"5px 10px",background:"transparent",color:muted,border:"1px solid "+border,borderRadius:6,fontSize:12,cursor:"pointer"}}>Remove</button>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length === 0 && <div style={{textAlign:"center",color:muted,padding:24,fontSize:13}}>No players found</div>}
       </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════
-//  DASHBOARD
-// ═══════════════════════════════════════════════
-function Dashboard({subs,players,onExport,onPlayersUpdate}) {
-  const [tab,setTab]=useState("overview");
-  const flagged=subs.filter(isFlagged);
-  const withPain=subs.filter(s=>s.painData?.hasPain).length;
-  const withIllness=subs.filter(s=>s.painData?.illness).length;
-  const readyYes=subs.filter(s=>s.readyToTrain==="yes").length;
-  const total=subs.length;
-  const barData=subs.map(s=>({name:s.player.split(" ").pop(),Fatigue:s.fatigue,Sleep:s.sleepQuality,Appetite:s.appetite,Soreness:s.soreness}));
-  const formatPain=s=>{const pd=s.painData;if(!pd?.hasPain)return null;const side=pd.side?`[${pd.side}]`:"";const areas=[...(pd.muscles||[]),...(pd.central||[])].join(", ");const type=(pd.painType||[]).join(", ");return[side,areas,type].filter(Boolean).join(" · ")||"Reported";};
-  const TABS=[["overview","Overview"],["players","Players"],["flags",`🚨 Flags (${flagged.length})`],["roster","👥 Roster"]];
+// ── Dashboard ─────────────────────────────────────────────
+function Dashboard(props) {
+  var subs = props.subs, players = props.players, onExport = props.onExport, onPlayersUpdate = props.onPlayersUpdate;
+  var ts = useState("overview"); var tab = ts[0], setTab = ts[1];
+
+  var flagged = subs.filter(isFlagged);
+  var withPain = subs.filter(function(s){ return s.painData && s.painData.hasPain; }).length;
+  var withIllness = subs.filter(function(s){ return s.painData && s.painData.illness; }).length;
+  var readyYes = subs.filter(function(s){ return s.readyToTrain === "yes"; }).length;
+  var total = subs.length;
+
+  var barData = subs.map(function(s) {
+    return {name:s.player.split(" ").pop(), Fatigue:s.fatigue, Sleep:s.sleepQuality, Appetite:s.appetite, Soreness:s.soreness};
+  });
+
+  function formatPain(s) {
+    var pd = s.painData;
+    if (!pd || !pd.hasPain) return null;
+    var side = pd.side ? "[" + pd.side + "]" : "";
+    var areas = (pd.muscles || []).concat(pd.central || []).join(", ");
+    var type = (pd.painType || []).join(", ");
+    return [side, areas, type].filter(function(x){ return x; }).join(" - ") || "Reported";
+  }
+
+  var TABS = [["overview","Overview"],["players","Players"],["flags","Flags ("+flagged.length+")"],["roster","Roster"]];
+
   return (
     <div>
-      <div style={{background:C.navy,borderRadius:14,padding:"16px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 4px 16px rgba(15,31,61,0.18)"}}>
+      <div style={{background:navy,borderRadius:14,padding:"16px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 4px 16px rgba(15,31,61,0.18)"}}>
         <div>
-          <div style={{fontFamily:DISP,fontSize:28,fontWeight:700,color:C.yellow,letterSpacing:2,lineHeight:1}}>AIK</div>
+          <div style={{fontFamily:DISP,fontSize:28,fontWeight:700,color:yellow,letterSpacing:2,lineHeight:1}}>AIK</div>
           <div style={{fontSize:12,color:"#7b93bc",marginTop:3}}>{new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
         </div>
-        <button onClick={onExport} style={{padding:"8px 14px",background:C.yellow,color:C.navy,border:"none",borderRadius:7,fontFamily:DISP,fontSize:13,fontWeight:600,letterSpacing:0.5,cursor:"pointer"}}>⬇ CSV</button>
+        <button onClick={onExport} style={{padding:"8px 14px",background:yellow,color:navy,border:"none",borderRadius:7,fontFamily:DISP,fontSize:13,fontWeight:600,cursor:"pointer"}}>Download CSV</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-        {[["Submitted",`${total}/${players.length}`,C.navy],["Flagged",flagged.length,flagged.length?C.red:C.green],["Pain",withPain,withPain?C.red:C.green],["Illness",withIllness,withIllness?C.amber:C.green]].map(([l,v,col])=>(
-          <div key={l} style={{...card,marginBottom:0,padding:"14px 8px",textAlign:"center",borderTop:`3px solid ${col}`}}>
-            <div style={{fontSize:22,fontWeight:900,color:col}}>{v}</div>
-            <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginTop:2}}>{l}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:3,background:"#e2e8f0",borderRadius:9,padding:4,marginBottom:14}}>
-        {TABS.map(([v,l])=>(
-          <button key={v} onClick={()=>setTab(v)} style={{flex:1,padding:"8px 3px",borderRadius:6,border:"none",background:tab===v?C.navy:"transparent",color:tab===v?C.yellow:C.muted,fontWeight:tab===v?700:500,cursor:"pointer",fontSize:12}}>{l}</button>
-        ))}
-      </div>
-      {total===0&&tab!=="roster"&&<div style={{...card,textAlign:"center",padding:48,color:C.muted}}>No submissions yet — waiting for players to check in…</div>}
 
-      {tab==="overview"&&total>0&&(
-        <div style={card}>
-          <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,marginBottom:14,fontSize:15,color:C.navy}}>TEAM AVERAGES</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+        {[["Submitted",total+"/"+players.length,navy],["Flagged",flagged.length,flagged.length?red:green],["Pain",withPain,withPain?red:green],["Illness",withIllness,withIllness?amber:green]].map(function(item) {
+          return (
+            <div key={item[0]} style={{background:white,borderRadius:12,padding:"14px 8px",textAlign:"center",boxShadow:"0 1px 4px rgba(15,31,61,0.08)",borderTop:"3px solid "+item[2]}}>
+              <div style={{fontSize:22,fontWeight:900,color:item[2]}}>{item[1]}</div>
+              <div style={{fontSize:10,fontWeight:700,color:muted,textTransform:"uppercase",letterSpacing:0.4,marginTop:2}}>{item[0]}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{display:"flex",gap:3,background:"#e2e8f0",borderRadius:9,padding:4,marginBottom:14}}>
+        {TABS.map(function(t) {
+          return (
+            <button key={t[0]} onClick={function(){ setTab(t[0]); }}
+              style={{flex:1,padding:"8px 3px",borderRadius:6,border:"none",
+                background:tab===t[0]?navy:"transparent",color:tab===t[0]?yellow:muted,
+                fontWeight:tab===t[0]?700:500,cursor:"pointer",fontSize:12}}>{t[1]}</button>
+          );
+        })}
+      </div>
+
+      {total === 0 && tab !== "roster" && <div style={{background:white,borderRadius:12,padding:48,textAlign:"center",color:muted,boxShadow:"0 1px 4px rgba(15,31,61,0.08)"}}>No submissions yet...</div>}
+
+      {tab === "overview" && total > 0 && (
+        <div style={cardStyle}>
+          <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,marginBottom:14,fontSize:15,color:navy}}>TEAM AVERAGES</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:22}}>
             <ScorePill label="Fatigue" value={parseFloat(avg(subs,"fatigue"))}/>
             <ScorePill label="Sleep" value={parseFloat(avg(subs,"sleepQuality"))}/>
             <ScorePill label="Appetite" value={parseFloat(avg(subs,"appetite"))}/>
             <ScorePill label="Soreness" value={parseFloat(avg(subs,"soreness"))}/>
           </div>
-          <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,fontSize:13,marginBottom:12,color:C.navy}}>SCORES BY PLAYER</div>
-          <BarChart data={barData}/>
+          <div style={{fontFamily:DISP,fontWeight:600,letterSpacing:0.5,fontSize:13,marginBottom:12,color:navy}}>SCORES BY PLAYER</div>
+          <SimpleBar data={barData}/>
         </div>
       )}
 
-      {tab==="players"&&total>0&&subs.map(s=>{const pain=formatPain(s);const fl=isFlagged(s);return(
-        <div key={s.player} style={{...card,borderLeft:`4px solid ${fl?C.red:C.green}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontWeight:800,color:C.navy}}>{s.player}</span>
-              {fl&&<Tag col={C.red}>FLAGGED</Tag>}
+      {tab === "players" && total > 0 && subs.map(function(s) {
+        var pain = formatPain(s);
+        var fl = isFlagged(s);
+        var pd = s.painData || {};
+        return (
+          <div key={s.player} style={{background:white,borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.08)",marginBottom:14,borderLeft:"4px solid "+(fl?red:green)}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontWeight:800,color:navy}}>{s.player}</span>
+                {fl && <Tag col={red}>FLAGGED</Tag>}
+              </div>
+              <span style={{fontSize:12,color:muted}}>{s.timestamp}</span>
             </div>
-            <span style={{fontSize:12,color:C.muted}}>{s.timestamp}</span>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7,marginBottom:10}}>
-            <ScorePill label="Fatigue" value={s.fatigue}/>
-            <ScorePill label="Sleep" value={s.sleepQuality}/>
-            <ScorePill label="Appetite" value={s.appetite}/>
-            <ScorePill label="Soreness" value={s.soreness}/>
-            <div style={{textAlign:"center",background:C.faint,borderRadius:8,padding:"10px 4px"}}>
-              <div style={{fontSize:9,color:C.muted,fontWeight:800,textTransform:"uppercase"}}>Ready</div>
-              <div style={{fontSize:22,marginTop:3}}>{s.readyToTrain==="yes"?"✅":s.readyToTrain==="partial"?"⚡":"❌"}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7,marginBottom:10}}>
+              <ScorePill label="Fatigue" value={s.fatigue}/>
+              <ScorePill label="Sleep" value={s.sleepQuality}/>
+              <ScorePill label="Appetite" value={s.appetite}/>
+              <ScorePill label="Soreness" value={s.soreness}/>
+              <div style={{textAlign:"center",background:faint,borderRadius:8,padding:"10px 4px"}}>
+                <div style={{fontSize:9,color:muted,fontWeight:800,textTransform:"uppercase"}}>Ready</div>
+                <div style={{fontSize:22,marginTop:3}}>{s.readyToTrain==="yes"?"Yes":s.readyToTrain==="partial"?"Part.":"No"}</div>
+              </div>
             </div>
+            {s.hoursSlept && <div style={{fontSize:12,color:muted,marginBottom:8}}>{"Slept: " + s.hoursSlept + "h"}</div>}
+            {pain && <div style={{fontSize:12,marginBottom:8,padding:"6px 10px",background:"#fef2f2",borderRadius:7,border:"1px solid #fecaca"}}><span style={{color:red,fontWeight:700}}>Pain: </span><span style={{color:"#7f1d1d"}}>{pain}</span></div>}
+            {pd.illness && <div style={{fontSize:12,marginBottom:8,padding:"6px 10px",background:"#fffbeb",borderRadius:7,border:"1px solid #fde68a"}}><span style={{color:amber,fontWeight:700}}>Illness: </span><span style={{color:"#78350f"}}>{(pd.illnessTypes||[]).join(", ") || "Reported"}</span></div>}
+            {s.comments && <div style={{fontSize:12,color:muted,background:faint,borderRadius:7,padding:"8px 12px"}}>{s.comments}</div>}
           </div>
-          {s.hoursSlept&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>🛏 Hours slept: <strong style={{color:C.navy}}>{s.hoursSlept}h</strong></div>}
-          {pain&&<div style={{fontSize:12,marginBottom:8,padding:"6px 10px",background:"#fef2f2",borderRadius:7,border:"1px solid #fecaca"}}><span style={{color:C.red,fontWeight:700}}>⚠️ Pain: </span><span style={{color:"#7f1d1d"}}>{pain}</span></div>}
-          {s.painData?.illness&&<div style={{fontSize:12,marginBottom:8,padding:"6px 10px",background:"#fffbeb",borderRadius:7,border:"1px solid #fde68a"}}><span style={{color:C.amber,fontWeight:700}}>🤒 Illness: </span><span style={{color:"#78350f"}}>{(s.painData.illnessTypes||[]).join(", ")||"Reported"}</span></div>}
-          {s.comments&&<div style={{fontSize:12,color:C.muted,background:C.faint,borderRadius:7,padding:"8px 12px"}}>💬 {s.comments}</div>}
-        </div>
-      );})}
+        );
+      })}
 
-      {tab==="flags"&&total>0&&(flagged.length===0?(
-        <div style={{...card,textAlign:"center",padding:48}}>
-          <div style={{fontSize:40}}>🎉</div>
-          <div style={{fontWeight:700,color:C.green,marginTop:10,fontSize:15}}>No flags today — team looking good!</div>
-        </div>
-      ):flagged.map(s=>{const pain=formatPain(s);return(
-        <div key={s.player} style={{...card,borderLeft:`4px solid ${C.red}`}}>
-          <div style={{fontWeight:800,color:C.navy,marginBottom:10}}>{s.player}</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:s.comments?10:0}}>
-            {s.fatigue<=2&&<Tag col={C.red}>⚡ Low energy ({s.fatigue}/5)</Tag>}
-            {s.sleepQuality<=2&&<Tag col={C.red}>{"😴 Poor sleep (" + s.sleepQuality + "/5)" + (s.hoursSlept ? " · " + s.hoursSlept + "h" : "")}</Tag>}
-            {s.soreness<=2&&<Tag col={C.red}>💪 High soreness ({s.soreness}/5)</Tag>}
-            {s.appetite<=2&&<Tag col={C.amber}>🍽 Poor appetite ({s.appetite}/5)</Tag>}
-            {pain&&<Tag col={C.red}>⚠️ {pain}</Tag>}
-            {s.painData?.illness&&<Tag col={C.amber}>🤒 {(s.painData.illnessTypes||[]).join(", ")||"Illness"}</Tag>}
-            {s.readyToTrain==="no"&&<Tag col={C.red}>❌ Not ready</Tag>}
-            {s.readyToTrain==="partial"&&<Tag col={C.amber}>⚡ Partially ready</Tag>}
+      {tab === "flags" && total > 0 && (
+        flagged.length === 0 ? (
+          <div style={{background:white,borderRadius:12,padding:48,textAlign:"center",boxShadow:"0 1px 4px rgba(15,31,61,0.08)"}}>
+            <div style={{fontSize:40}}>🎉</div>
+            <div style={{fontWeight:700,color:green,marginTop:10,fontSize:15}}>No flags today — team looking good!</div>
           </div>
-          {s.comments&&<div style={{fontSize:12,color:C.muted,background:C.faint,borderRadius:7,padding:"8px 12px"}}>💬 {s.comments}</div>}
-        </div>
-      );})}
+        ) : flagged.map(function(s) {
+          var pain = formatPain(s);
+          var pd = s.painData || {};
+          return (
+            <div key={s.player} style={{background:white,borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.08)",marginBottom:14,borderLeft:"4px solid "+red}}>
+              <div style={{fontWeight:800,color:navy,marginBottom:10}}>{s.player}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:s.comments?10:0}}>
+                {s.fatigue <= 2 && <Tag col={red}>{"Low energy (" + s.fatigue + "/5)"}</Tag>}
+                {s.sleepQuality <= 2 && <Tag col={red}>{"Poor sleep (" + s.sleepQuality + "/5)"}</Tag>}
+                {s.soreness <= 2 && <Tag col={red}>{"High soreness (" + s.soreness + "/5)"}</Tag>}
+                {s.appetite <= 2 && <Tag col={amber}>{"Poor appetite (" + s.appetite + "/5)"}</Tag>}
+                {pain && <Tag col={red}>{"Pain: " + pain}</Tag>}
+                {pd.illness && <Tag col={amber}>{(pd.illnessTypes||[]).join(", ") || "Illness"}</Tag>}
+                {s.readyToTrain === "no" && <Tag col={red}>Not ready</Tag>}
+                {s.readyToTrain === "partial" && <Tag col={amber}>Partially ready</Tag>}
+              </div>
+              {s.comments && <div style={{fontSize:12,color:muted,background:faint,borderRadius:7,padding:"8px 12px"}}>{s.comments}</div>}
+            </div>
+          );
+        })
+      )}
 
-      {tab==="roster"&&<RosterManager players={players} onUpdate={onPlayersUpdate}/>}
+      {tab === "roster" && <RosterManager players={players} onUpdate={onPlayersUpdate}/>}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════
-//  APP ROOT
-// ═══════════════════════════════════════════════
+// ── App ───────────────────────────────────────────────────
 function App() {
-  const [view,setView]=useState("player");
-  const [unlocked,setUnlocked]=useState(false);
-  const [subs,setSubs]=useState([]);
-  const [submitted,setSubmitted]=useState(false);
-  const [lastPlayer,setLastPlayer]=useState("");
-  const [players,setPlayers]=useState(()=>loadPlayers());
+  var vs = useState("player"); var view = vs[0], setView = vs[1];
+  var us = useState(false); var unlocked = us[0], setUnlocked = us[1];
+  var subS = useState([]); var subs = subS[0], setSubs = subS[1];
+  var subd = useState(false); var submitted = subd[0], setSubmitted = subd[1];
+  var lps = useState(""); var lastPlayer = lps[0], setLastPlayer = lps[1];
+  var pls = useState(function(){ return loadPlayers(); }); var players = pls[0], setPlayers = pls[1];
 
-  const handleSubmit=async f=>{
-    const sub={...f,timestamp:nowTime()};
+  function handleSubmit(f) {
+    var sub = Object.assign({}, f, {timestamp: nowTime()});
     setLastPlayer(f.player);
-    setSubs(prev=>[...prev.filter(s=>s.player!==f.player),sub]);
-    await sendToSheet(sub);
+    setSubs(function(prev){ return prev.filter(function(s){ return s.player !== f.player; }).concat([sub]); });
+    sendToSheet(sub);
     setSubmitted(true);
-  };
+  }
 
-  const exportCSV=()=>{
-    const h="Player,Time,Fatigue,Sleep Quality,Hours Slept,Appetite,Soreness,Pain,Pain Side,Pain Areas,Pain Type,Illness,Illness Types,Ready,Comments";
-    const rows=subs.map(s=>{const pd=s.painData||{};return`"${s.player}","${s.timestamp}",${s.fatigue},${s.sleepQuality},"${s.hoursSlept||""}",${s.appetite},${s.soreness},"${pd.hasPain?"Yes":"No"}","${pd.side||""}","${[...(pd.muscles||[]),...(pd.central||[])].join("; ")}","${(pd.painType||[]).join("; ")}","${pd.illness?"Yes":"No"}","${(pd.illnessTypes||[]).join("; ")}","${s.readyToTrain}","${(s.comments||"").replace(/"/g,"'")}"`});
-    const a=Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([[h,...rows].join("\n")],{type:"text/csv"})),download:`AIK_wellness_${new Date().toISOString().split("T")[0]}.csv`});
+  function exportCSV() {
+    var h = "Player,Time,Fatigue,Sleep Quality,Hours Slept,Appetite,Soreness,Pain,Pain Side,Pain Areas,Pain Type,Illness,Illness Types,Ready,Comments";
+    var rows = subs.map(function(s) {
+      var pd = s.painData || {};
+      var areas = (pd.muscles||[]).concat(pd.central||[]).join("; ");
+      return '"'+s.player+'","'+s.timestamp+'",'+s.fatigue+','+s.sleepQuality+',"'+(s.hoursSlept||'')+'",'+s.appetite+','+s.soreness+',"'+(pd.hasPain?"Yes":"No")+'","'+(pd.side||'')+'","'+areas+'","'+((pd.painType||[]).join("; "))+'","'+(pd.illness?"Yes":"No")+'","'+((pd.illnessTypes||[]).join("; "))+'","'+s.readyToTrain+'","'+(s.comments||"").replace(/"/g,"'")+'"';
+    });
+    var blob = new Blob([[h].concat(rows).join("\n")], {type:"text/csv"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "AIK_wellness_" + new Date().toISOString().split("T")[0] + ".csv";
     a.click();
-  };
+  }
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,color:C.navy}}>
-      <nav style={{background:C.navy,borderBottom:`2px solid ${C.gold}`,padding:"11px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:10}}>
-        <span style={{fontFamily:DISP,fontWeight:700,fontSize:22,color:C.yellow,letterSpacing:2}}>AIK</span>
+    <div style={{minHeight:"100vh",background:bg,color:navy}}>
+      <nav style={{background:navy,borderBottom:"2px solid "+gold,padding:"11px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:10}}>
+        <span style={{fontFamily:DISP,fontWeight:700,fontSize:22,color:yellow,letterSpacing:2}}>AIK</span>
         <div style={{display:"flex",gap:6}}>
-          {[["player","Player"],["staff","Staff 🔒"]].map(([v,l])=>(
-            <button key={v} onClick={()=>setView(v)} style={{padding:"7px 14px",borderRadius:7,border:`1.5px solid ${view===v?C.yellow:C.navyMid}`,background:view===v?C.yellow:"transparent",color:view===v?C.navy:"#7b93bc",fontWeight:700,cursor:"pointer",fontSize:13}}>{l}</button>
-          ))}
+          {[["player","Player"],["staff","Staff"]].map(function(item) {
+            return (
+              <button key={item[0]} onClick={function(){ setView(item[0]); }}
+                style={{padding:"7px 14px",borderRadius:7,border:"1.5px solid "+(view===item[0]?yellow:navyMid),
+                  background:view===item[0]?yellow:"transparent",color:view===item[0]?navy:"#7b93bc",
+                  fontWeight:700,cursor:"pointer",fontSize:13}}>{item[1]}</button>
+            );
+          })}
         </div>
       </nav>
       <div style={{maxWidth:560,margin:"0 auto",padding:"22px 14px"}}>
-        {view==="player"?(submitted?<SuccessScreen player={lastPlayer} onReset={()=>setSubmitted(false)}/>:<PlayerForm onSubmit={handleSubmit} players={players}/>):(unlocked?<Dashboard subs={subs} players={players} onExport={exportCSV} onPlayersUpdate={setPlayers}/>:<PinScreen onUnlock={()=>setUnlocked(true)}/>)}
+        {view === "player" ? (
+          submitted ? <SuccessScreen player={lastPlayer} onReset={function(){ setSubmitted(false); }}/> : <PlayerForm onSubmit={handleSubmit} players={players}/>
+        ) : (
+          unlocked ? <Dashboard subs={subs} players={players} onExport={exportCSV} onPlayersUpdate={setPlayers}/> : <PinScreen onUnlock={function(){ setUnlocked(true); }}/>
+        )}
       </div>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
 </script>
 </body>
 </html>
