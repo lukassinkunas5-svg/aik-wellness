@@ -88,13 +88,16 @@ function loadTodaySubs(){
     if(!stored) return [];
     var parsed=JSON.parse(stored);
     if(!parsed.length) return [];
-    // Check the date of the first entry
-    if(parsed[0].date && parsed[0].date !== todayDate()) {
+    // Clear if no date field OR date is not today
+    if(!parsed[0].date || parsed[0].date !== todayDate()){
       localStorage.removeItem(SUBS_KEY);
       return [];
     }
     return parsed;
-  } catch(e){return [];}
+  } catch(e){
+    localStorage.removeItem(SUBS_KEY);
+    return [];
+  }
 }
 
 function sendToSheet(sub){
