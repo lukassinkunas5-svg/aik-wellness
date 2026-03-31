@@ -71,12 +71,30 @@ function nowTime(){
   return new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
 }
 
+function todayDate(){
+  return new Date().toISOString().split("T")[0];
+}
 function loadLS(key,def){
   try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}
   catch(e){return def;}
 }
 function saveLS(key,val){
   try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}
+}
+// Load subs only if they are from today — clears automatically each new day
+function loadTodaySubs(){
+  try{
+    var stored=localStorage.getItem(SUBS_KEY);
+    if(!stored) return [];
+    var parsed=JSON.parse(stored);
+    if(!parsed.length) return [];
+    // Check the date of the first entry
+    if(parsed[0].date && parsed[0].date !== todayDate()) {
+      localStorage.removeItem(SUBS_KEY);
+      return [];
+    }
+    return parsed;
+  } catch(e){return [];}
 }
 
 function sendToSheet(sub){
@@ -516,7 +534,7 @@ function PinScreen(props){
       <button onClick={check} style={{width:"100%",padding:15,background:navy,color:yellow,
         border:"none",borderRadius:14,fontFamily:DISP,fontSize:17,fontWeight:700,
         letterSpacing:1,cursor:"pointer",marginTop:4}}>UNLOCK DASHBOARD</button>
-      <p style={{fontSize:11,color:muted,marginTop:14}}>Default PIN: 1234</p>
+
     </div>
   );
 }
@@ -730,11 +748,11 @@ function Dashboard(props){
 function App(){
   var vs=useState("player"); var view=vs[0],setView=vs[1];
   var us=useState(false); var unlocked=us[0],setUnlocked=us[1];
-  var subS=useState(function(){return loadLS(SUBS_KEY,[]);}); var subs=subS[0],setSubs=subS[1];
+  var subS=useState(function(){return loadTodaySubs();}); var subs=subS[0],setSubs=subS[1];
   var pls=useState(function(){return loadLS(PLAYERS_KEY,DEFAULT_PLAYERS);}); var players=pls[0],setPlayers=pls[1];
 
   function handleSubmit(f){
-    var sub=Object.assign({},f,{timestamp:nowTime()});
+    var sub=Object.assign({},f,{date:todayDate(),timestamp:nowTime()});
     var updated=subs.filter(function(s){return s.player!==f.player;}).concat([sub]);
     setSubs(updated);saveLS(SUBS_KEY,updated);
     sendToSheet(sub);
@@ -745,11 +763,11 @@ function App(){
   }
 
   function exportCSV(){
-    var h="Player,Time,Fatigue,Sleep Quality,Hours Slept,Appetite,Soreness,Pain,Pain Side,Pain Areas,Pain Type,Illness,Illness Types,Ready,Comments";
+    var h="Date,Player,Time,Fatigue,Sleep Quality,Hours Slept,Appetite,Soreness,Pain,Pain Side,Pain Areas,Pain Type,Illness,Illness Types,Ready,Comments";
     var rows=subs.map(function(s){
       var pd=s.painData||{};
       var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
-      return '"'+s.player+'","'+s.timestamp+'",'+s.fatigue+','+s.sleepQuality+',"'+(s.hoursSlept||"")+'",'+s.appetite+','+s.soreness+',"'+(pd.hasPain?"Yes":"No")+'","'+(pd.side||"")+'","'+areas+'","'+((pd.painType||[]).join("; "))+'","'+(pd.illness?"Yes":"No")+'","'+((pd.illnessTypes||[]).join("; "))+'","'+s.readyToTrain+'","'+(s.comments||"").replace(/"/g,"'")+'"';
+      return '"'+(s.date||todayDate())+'","'+s.player+'","'+s.timestamp+'",'+s.fatigue+','+s.sleepQuality+',"'+(s.hoursSlept||"")+'",'+s.appetite+','+s.soreness+',"'+(pd.hasPain?"Yes":"No")+'","'+(pd.side||"")+'","'+areas+'","'+((pd.painType||[]).join("; "))+'","'+(pd.illness?"Yes":"No")+'","'+((pd.illnessTypes||[]).join("; "))+'","'+s.readyToTrain+'","'+(s.comments||"").replace(/"/g,"'")+'"';
     });
     var blob=new Blob([[h].concat(rows).join("\n")],{type:"text/csv"});
     var a=document.createElement("a");
