@@ -104,10 +104,11 @@ function sendToSheet(sub){
   if(!SHEET_URL) return;
   var pd=sub.painData||{};
   var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
-  fetch(SHEET_URL,{
+      fetch(SHEET_URL,{
     method:"POST",mode:"no-cors",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
+      date:sub.date||todayDate(),
       player:sub.player,timestamp:sub.timestamp,
       fatigue:sub.fatigue,sleepQuality:sub.sleepQuality,hoursSlept:sub.hoursSlept||"",
       appetite:sub.appetite,soreness:sub.soreness,
