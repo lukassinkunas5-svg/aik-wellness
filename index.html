@@ -51,12 +51,11 @@ var red="#dc2626", amber="#d97706", green="#16a34a";
 var DISP = "'Oswald','Impact',sans-serif";
 
 // ── DATE / TIME ───────────────────────────────────────────
-// Returns DD/MM/YYYY — renders correctly in Google Sheets
 function todayDate(){
-  var d = new Date();
-  var dd = String(d.getDate()).padStart(2,"0");
-  var mm = String(d.getMonth()+1).padStart(2,"0");
-  var yyyy = d.getFullYear();
+  var d=new Date();
+  var dd=String(d.getDate()).padStart(2,"0");
+  var mm=String(d.getMonth()+1).padStart(2,"0");
+  var yyyy=d.getFullYear();
   return dd+"/"+mm+"/"+yyyy;
 }
 function nowTime(){
@@ -64,68 +63,73 @@ function nowTime(){
 }
 
 // ── LOCAL STORAGE ─────────────────────────────────────────
-function loadLS(key, def){
-  try{ var v=localStorage.getItem(key); return v?JSON.parse(v):def; }
-  catch(e){ return def; }
+function loadLS(key,def){
+  try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}
+  catch(e){return def;}
 }
-function saveLS(key, val){
-  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+function saveLS(key,val){
+  try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}
 }
-// Subs auto-clear each new day
 function loadTodaySubs(){
   try{
-    var stored = localStorage.getItem(SUBS_KEY);
+    var stored=localStorage.getItem(SUBS_KEY);
     if(!stored) return [];
-    var parsed = JSON.parse(stored);
+    var parsed=JSON.parse(stored);
     if(!parsed.length) return [];
-    // Clear if no date, wrong format, or not today
-    if(!parsed[0].date || parsed[0].date !== todayDate()){
+    if(!parsed[0].date||parsed[0].date!==todayDate()){
       localStorage.removeItem(SUBS_KEY);
       return [];
     }
     return parsed;
-  } catch(e){
+  }catch(e){
     localStorage.removeItem(SUBS_KEY);
     return [];
   }
 }
 
 // ── GOOGLE SHEETS ─────────────────────────────────────────
-// Column order must match sheet headers exactly:
-// Date | Player | Time | Fatigue | Sleep Quality | Hours Slept |
-// Appetite | Soreness | Pain | Pain Side | Pain Areas | Pain Type |
-// Illness | Illness Types | Ready | Comments
 function sendToSheet(sub){
   if(!SHEET_URL) return;
-  var pd = sub.painData || {};
-  var areas = (pd.muscles||[]).concat(pd.central||[]).join("; ");
-  var payload = {
-    date:         sub.date,
-    player:       sub.player,
-    timestamp:    sub.timestamp,
-    fatigue:      sub.fatigue,
-    sleepQuality: sub.sleepQuality,
-    hoursSlept:   sub.hoursSlept || "",
-    appetite:     sub.appetite,
-    soreness:     sub.soreness,
-    pain:         pd.hasPain ? "Yes" : "No",
-    painSide:     pd.side || "",
-    painAreas:    areas,
-    painType:     (pd.painType||[]).join("; "),
-    illness:      pd.illness ? "Yes" : "No",
-    illnessTypes: (pd.illnessTypes||[]).join("; "),
-    readyToTrain: sub.readyToTrain,
-    comments:     sub.comments || ""
-  };
+  var pd=sub.painData||{};
+  var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
   fetch(SHEET_URL,{
-    method:"POST", mode:"no-cors",
+    method:"POST",mode:"no-cors",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(payload)
+    body:JSON.stringify({
+      date:sub.date, player:sub.player, timestamp:sub.timestamp,
+      fatigue:sub.fatigue, sleepQuality:sub.sleepQuality, hoursSlept:sub.hoursSlept||"",
+      appetite:sub.appetite, soreness:sub.soreness,
+      pain:pd.hasPain?"Yes":"No", painSide:pd.side||"",
+      painAreas:areas, painType:(pd.painType||[]).join("; "),
+      illness:pd.illness?"Yes":"No", illnessTypes:(pd.illnessTypes||[]).join("; "),
+      readyToTrain:sub.readyToTrain, comments:sub.comments||""
+    })
   }).catch(function(){});
 }
 
+function parseSheetSubs(rows){
+  return rows.map(function(r){
+    var pd={
+      hasPain:r["Pain"]==="Yes",
+      side:r["Pain Side"]||null,
+      muscles:r["Pain Areas"]?r["Pain Areas"].split("; ").filter(function(x){return x;}):[],
+      central:[],
+      painType:r["Pain Type"]?r["Pain Type"].split("; ").filter(function(x){return x;}):[],
+      illness:r["Illness"]==="Yes",
+      illnessTypes:r["Illness Types"]?r["Illness Types"].split("; ").filter(function(x){return x;}):[]
+    };
+    return {
+      date:r["Date"], player:r["Player"], timestamp:r["Time"],
+      fatigue:Number(r["Fatigue"]), sleepQuality:Number(r["Sleep Quality"]),
+      hoursSlept:r["Hours Slept"]||"", appetite:Number(r["Appetite"]),
+      soreness:Number(r["Soreness"]), readyToTrain:r["Ready"],
+      comments:r["Comments"]||"", painData:pd
+    };
+  });
+}
+
 // ── HELPERS ───────────────────────────────────────────────
-function scoreCol(v){ return v>=4?green:v===3?amber:red; }
+function scoreCol(v){return v>=4?green:v===3?amber:red;}
 function isFlagged(s){
   var pd=s.painData||{};
   return s.fatigue<=2||s.sleepQuality<=2||s.soreness<=2||s.appetite<=2||pd.hasPain||pd.illness||s.readyToTrain==="no";
@@ -134,6 +138,15 @@ function avgVal(subs,key){
   if(!subs.length) return "—";
   return (subs.reduce(function(a,s){return a+s[key];},0)/subs.length).toFixed(1);
 }
+function calcStats(subs,key){
+  if(subs.length<2) return {mean:0,sd:1};
+  var vals=subs.map(function(s){return s[key];});
+  var mean=vals.reduce(function(a,b){return a+b;},0)/vals.length;
+  var variance=vals.reduce(function(a,b){return a+Math.pow(b-mean,2);},0)/vals.length;
+  return {mean:mean,sd:Math.sqrt(variance)||1};
+}
+function zScore(val,stats){return ((val-stats.mean)/stats.sd).toFixed(2);}
+function zCol(z){var n=parseFloat(z);return n>=1?green:n<=-1?red:amber;}
 
 // ── PRIMITIVES ────────────────────────────────────────────
 function ProgressBar(props){
@@ -170,11 +183,11 @@ function QTitle(props){
 }
 
 function ScaleRow(props){
-  var labels = props.labels;
+  var labels=props.labels;
   return (
     <div style={{display:"flex",gap:8}}>
       {[1,2,3,4,5].map(function(v){
-        var col=scoreCol(v), sel=props.value===v;
+        var col=scoreCol(v),sel=props.value===v;
         var lbl=labels[v-1];
         return (
           <button key={v} onClick={function(){props.onChange(v);}} style={{
@@ -212,7 +225,7 @@ function ChoiceRow(props){
 }
 
 function Chip(props){
-  var sel=props.selected, col=props.color||navy;
+  var sel=props.selected,col=props.color||navy;
   return (
     <button onClick={props.onClick} style={{
       padding:"8px 14px",borderRadius:20,margin:"0 4px 6px 0",
@@ -276,8 +289,8 @@ function ScorePill(props){
 
 // ── PLAYER FLOW ───────────────────────────────────────────
 function PlayerFlow(props){
-  var players=props.players, subs=props.subs, onSubmit=props.onSubmit;
-  var stepS=useState(0); var step=stepS[0],setStep=stepS[1];
+  var players=props.players,subs=props.subs,onSubmit=props.onSubmit;
+  var stepS=useState(0);var step=stepS[0],setStep=stepS[1];
   var emptyPain={hasPain:false,side:null,muscles:[],central:[],painType:[],illness:false,illnessTypes:[]};
   var fS=useState({player:"",fatigue:null,sleepQuality:null,hoursSlept:"",
     appetite:null,soreness:null,painData:emptyPain,comments:"",readyToTrain:null});
@@ -293,8 +306,8 @@ function PlayerFlow(props){
   function toggleArr(k,item){
     var pd=f.painData;
     var arr=pd[k]||[];
-    var next=arr.indexOf(item)>=0?arr.filter(function(x){return x!==item;}):arr.concat([item]);
-    var np={};Object.keys(pd).forEach(function(key){np[key]=pd[key];});np[k]=next;
+    var nxt=arr.indexOf(item)>=0?arr.filter(function(x){return x!==item;}):arr.concat([item]);
+    var np={};Object.keys(pd).forEach(function(key){np[key]=pd[key];});np[k]=nxt;
     set("painData",np);
   }
   function submitForm(){onSubmit(f);setStep(10);}
@@ -304,7 +317,6 @@ function PlayerFlow(props){
   var hasSided=pd.side==="left"||pd.side==="right"||pd.side==="both";
   var alreadyDone=f.player&&subs.some(function(s){return s.player===f.player;});
 
-  // DONE
   if(step===10) return (
     <div className="fade" style={{textAlign:"center",padding:"56px 16px"}}>
       <div style={{width:88,height:88,borderRadius:"50%",background:green+"15",
@@ -325,14 +337,15 @@ function PlayerFlow(props){
     </div>
   );
 
-  // NAME SELECT
   if(step===0) return (
     <div className="fade">
       <div style={{textAlign:"center",marginBottom:22,padding:"28px 20px",
         background:navy,borderRadius:20,boxShadow:"0 4px 20px rgba(15,31,61,0.18)"}}>
         <div style={{fontFamily:DISP,fontSize:46,fontWeight:700,color:yellow,letterSpacing:4,lineHeight:1}}>AIK</div>
         <div style={{color:goldLight,fontSize:13,fontWeight:600,marginTop:8,letterSpacing:2}}>WELLNESS CHECK-IN</div>
-        <div style={{color:"#7b93bc",fontSize:12,marginTop:6}}>{todayDate().split("/").reverse().join("-") && new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+        <div style={{color:"#7b93bc",fontSize:12,marginTop:6}}>
+          {new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+        </div>
       </div>
       <Card>
         <div style={{fontSize:12,color:muted,fontWeight:700,letterSpacing:0.5,
@@ -363,7 +376,6 @@ function PlayerFlow(props){
     </div>
   );
 
-  // QUESTIONS
   return (
     <div>
       <div style={{background:white,borderRadius:16,padding:"16px 18px",
@@ -378,9 +390,7 @@ function PlayerFlow(props){
           </div>
         )}
       </div>
-
       <Card>
-        {/* Q1 — Fatigue */}
         {step===1&&(
           <div>
             <QTitle sub="Question 1 of 8" title="How energised do you feel right now?"/>
@@ -389,7 +399,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={!f.fatigue}/>
           </div>
         )}
-        {/* Q2 — Sleep Quality */}
         {step===2&&(
           <div>
             <QTitle sub="Question 2 of 8" title="How well did you sleep last night?"/>
@@ -414,7 +423,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={!f.sleepQuality}/>
           </div>
         )}
-        {/* Q3 — Appetite */}
         {step===3&&(
           <div>
             <QTitle sub="Question 3 of 8" title="How is your appetite today?"/>
@@ -423,7 +431,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={!f.appetite}/>
           </div>
         )}
-        {/* Q4 — Soreness */}
         {step===4&&(
           <div>
             <QTitle sub="Question 4 of 8" title="How do your muscles feel today?"/>
@@ -432,7 +439,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={!f.soreness}/>
           </div>
         )}
-        {/* Q5 — Pain */}
         {step===5&&(
           <div>
             <QTitle sub="Question 5 of 8" title="Do you have any pain or discomfort?"/>
@@ -498,7 +504,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={pd.hasPain===undefined||pd.hasPain===null}/>
           </div>
         )}
-        {/* Q6 — Illness */}
         {step===6&&(
           <div>
             <QTitle sub="Question 6 of 8" title="Are you feeling unwell or ill?"/>
@@ -522,7 +527,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={pd.illness===undefined||pd.illness===null}/>
           </div>
         )}
-        {/* Q7 — Ready */}
         {step===7&&(
           <div>
             <QTitle sub="Question 7 of 8" title="Are you ready to train today?"/>
@@ -531,7 +535,6 @@ function PlayerFlow(props){
             <NavButtons onBack={back} onNext={next} disabled={!f.readyToTrain}/>
           </div>
         )}
-        {/* Q8 — Comments */}
         {step===8&&(
           <div>
             <QTitle sub="Question 8 of 8" title="Anything we should know?"/>
@@ -551,8 +554,8 @@ function PlayerFlow(props){
 
 // ── PIN SCREEN ────────────────────────────────────────────
 function PinScreen(props){
-  var ps=useState(""); var p=ps[0],setP=ps[1];
-  var es=useState(false); var err=es[0],setErr=es[1];
+  var ps=useState("");var p=ps[0],setP=ps[1];
+  var es=useState(false);var err=es[0],setErr=es[1];
   function check(){if(p===PIN){props.onUnlock();}else{setErr(true);setP("");}}
   return (
     <div className="fade" style={{maxWidth:340,margin:"72px auto",padding:"0 16px",textAlign:"center"}}>
@@ -578,10 +581,10 @@ function PinScreen(props){
 
 // ── ROSTER MANAGER ────────────────────────────────────────
 function RosterManager(props){
-  var players=props.players, onUpdate=props.onUpdate;
-  var ns=useState(""); var newName=ns[0],setNewName=ns[1];
-  var ss=useState(""); var search=ss[0],setSearch=ss[1];
-  var cs=useState(null); var confirm=cs[0],setConfirm=cs[1];
+  var players=props.players,onUpdate=props.onUpdate;
+  var ns=useState("");var newName=ns[0],setNewName=ns[1];
+  var ss=useState("");var search=ss[0],setSearch=ss[1];
+  var cs=useState(null);var confirm=cs[0],setConfirm=cs[1];
   var sorted=players.slice().sort(function(a,b){return a.split(" ").pop().localeCompare(b.split(" ").pop());});
   var filtered=sorted.filter(function(p){return p.toLowerCase().indexOf(search.toLowerCase())>=0;});
   function save(u){saveLS(PLAYERS_KEY,u);onUpdate(u);}
@@ -635,9 +638,10 @@ function RosterManager(props){
 
 // ── DASHBOARD ─────────────────────────────────────────────
 function Dashboard(props){
-  var subs=props.subs, players=props.players;
-  var onExport=props.onExport, onPlayersUpdate=props.onPlayersUpdate, onClearDay=props.onClearDay;
-  var ts=useState("overview"); var tab=ts[0],setTab=ts[1];
+  var subs=props.subs,players=props.players;
+  var onExport=props.onExport,onPlayersUpdate=props.onPlayersUpdate,onClearDay=props.onClearDay;
+  var fetchFromSheet=props.fetchFromSheet,loading=props.loading,lastFetch=props.lastFetch;
+  var ts=useState("overview");var tab=ts[0],setTab=ts[1];
   var flagged=subs.filter(isFlagged);
   var withPain=subs.filter(function(s){return s.painData&&s.painData.hasPain;}).length;
   var withIllness=subs.filter(function(s){return s.painData&&s.painData.illness;}).length;
@@ -651,8 +655,15 @@ function Dashboard(props){
     return [side,areas,type].filter(function(x){return x;}).join(" · ")||"Reported";
   }
 
+  var zStats={
+    fatigue:calcStats(subs,"fatigue"),
+    sleepQuality:calcStats(subs,"sleepQuality"),
+    appetite:calcStats(subs,"appetite"),
+    soreness:calcStats(subs,"soreness")
+  };
+
   var TABS=[["overview","Overview"],["players","Players"],
-    ["flags","🚨 Flags ("+flagged.length+")"],["roster","👥 Roster"]];
+    ["flags","🚨 Flags ("+flagged.length+")"],["zscores","Z-Scores"],["roster","👥 Roster"]];
 
   return (
     <div>
@@ -663,9 +674,15 @@ function Dashboard(props){
           <div style={{fontFamily:DISP,fontSize:28,fontWeight:700,color:yellow,letterSpacing:2,lineHeight:1}}>AIK</div>
           <div style={{fontSize:12,color:"#7b93bc",marginTop:3}}>
             {new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}
+            {lastFetch&&<span style={{marginLeft:8,fontSize:11,color:"#3b5a8a"}}>{"· Updated "+lastFetch}</span>}
           </div>
         </div>
         <div style={{display:"flex",gap:8}}>
+          <button onClick={fetchFromSheet} style={{padding:"9px 14px",background:"#1e3a6e",
+            color:loading?"#3b5a8a":yellow,border:"none",borderRadius:10,
+            fontFamily:DISP,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+            {loading?"...":"⟳ Refresh"}
+          </button>
           <button onClick={onExport} style={{padding:"9px 14px",background:yellow,color:navy,
             border:"none",borderRadius:10,fontFamily:DISP,fontSize:13,fontWeight:700,cursor:"pointer"}}>⬇ CSV</button>
           <button onClick={onClearDay} style={{padding:"9px 14px",background:"#1e3a6e",color:"#7b93bc",
@@ -705,9 +722,14 @@ function Dashboard(props){
 
       {total===0&&tab!=="roster"&&(
         <div style={{background:white,borderRadius:16,padding:48,textAlign:"center",
-          color:muted,boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>No submissions yet...</div>
+          color:muted,boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>
+          <div style={{fontSize:32,marginBottom:12}}>📋</div>
+          <div style={{fontWeight:700,color:navy,marginBottom:6}}>No submissions yet</div>
+          <div style={{fontSize:13}}>Hit ⟳ Refresh to pull the latest from Google Sheets.</div>
+        </div>
       )}
 
+      {/* OVERVIEW */}
       {tab==="overview"&&total>0&&(
         <div style={{background:white,borderRadius:16,padding:18,boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>
           <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:navy,letterSpacing:1,marginBottom:14}}>TEAM AVERAGES</div>
@@ -719,6 +741,7 @@ function Dashboard(props){
         </div>
       )}
 
+      {/* PLAYERS */}
       {tab==="players"&&total>0&&subs.map(function(s){
         var pain=formatPain(s);var fl=isFlagged(s);var pd=s.painData||{};
         return (
@@ -756,6 +779,7 @@ function Dashboard(props){
         );
       })}
 
+      {/* FLAGS */}
       {tab==="flags"&&total>0&&(
         flagged.length===0?(
           <div style={{background:white,borderRadius:16,padding:48,textAlign:"center",
@@ -786,6 +810,88 @@ function Dashboard(props){
         })
       )}
 
+      {/* Z-SCORES */}
+      {tab==="zscores"&&(
+        total<2?(
+          <div style={{background:white,borderRadius:16,padding:32,textAlign:"center",
+            color:muted,boxShadow:"0 1px 4px rgba(15,31,61,0.07)"}}>
+            <div style={{fontSize:28,marginBottom:12}}>📊</div>
+            <div style={{fontWeight:700,color:navy,marginBottom:6}}>Need at least 2 submissions</div>
+            <div style={{fontSize:13}}>Z-scores compare each player to the team average.</div>
+          </div>
+        ):(
+          <div>
+            <div style={{background:white,borderRadius:16,padding:14,marginBottom:12,
+              boxShadow:"0 1px 4px rgba(15,31,61,0.07)",fontSize:12,color:muted,lineHeight:1.7}}>
+              <strong style={{color:navy}}>How to read: </strong>
+              Z-score shows deviation from today's team average.
+              <span style={{color:green,fontWeight:700}}> +1 or above</span> = well above average.
+              <span style={{color:red,fontWeight:700}}> -1 or below</span> = needs attention.
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1.8fr 1fr 1fr 1fr 1fr",
+              gap:6,padding:"6px 12px",marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:700,color:muted,textTransform:"uppercase"}}>Player</div>
+              {["Fatigue","Sleep","Appetite","Soreness"].map(function(l){
+                return <div key={l} style={{fontSize:11,fontWeight:700,color:muted,
+                  textTransform:"uppercase",textAlign:"center"}}>{l}</div>;
+              })}
+            </div>
+            {subs.slice().sort(function(a,b){
+              var az=parseFloat(zScore(a.fatigue,zStats.fatigue))+parseFloat(zScore(a.sleepQuality,zStats.sleepQuality))+parseFloat(zScore(a.appetite,zStats.appetite))+parseFloat(zScore(a.soreness,zStats.soreness));
+              var bz=parseFloat(zScore(b.fatigue,zStats.fatigue))+parseFloat(zScore(b.sleepQuality,zStats.sleepQuality))+parseFloat(zScore(b.appetite,zStats.appetite))+parseFloat(zScore(b.soreness,zStats.soreness));
+              return az-bz;
+            }).map(function(s){
+              var metrics=[
+                {key:"fatigue",stat:zStats.fatigue,val:s.fatigue},
+                {key:"sleepQuality",stat:zStats.sleepQuality,val:s.sleepQuality},
+                {key:"appetite",stat:zStats.appetite,val:s.appetite},
+                {key:"soreness",stat:zStats.soreness,val:s.soreness}
+              ];
+              var fl=isFlagged(s);
+              return (
+                <div key={s.player} style={{background:white,borderRadius:14,padding:"12px",
+                  marginBottom:8,boxShadow:"0 1px 4px rgba(15,31,61,0.07)",
+                  borderLeft:"4px solid "+(fl?red:green),
+                  display:"grid",gridTemplateColumns:"1.8fr 1fr 1fr 1fr 1fr",gap:6,alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,color:navy,fontSize:13}}>
+                      {s.player.split(" ")[0]+" "+s.player.split(" ").pop()}
+                    </div>
+                    {fl&&<Tag col={red}>FLAGGED</Tag>}
+                  </div>
+                  {metrics.map(function(m){
+                    var z=zScore(m.val,m.stat);
+                    var col=zCol(z);
+                    return (
+                      <div key={m.key} style={{textAlign:"center",background:col+"12",
+                        borderRadius:8,padding:"6px 2px",border:"1px solid "+col+"30"}}>
+                        <div style={{fontSize:14,fontWeight:800,color:col}}>
+                          {parseFloat(z)>0?"+"+z:z}
+                        </div>
+                        <div style={{fontSize:9,color:muted,marginTop:1}}>{"("+m.val+")"}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            <div style={{background:faint,borderRadius:14,padding:"12px",marginTop:8,
+              display:"grid",gridTemplateColumns:"1.8fr 1fr 1fr 1fr 1fr",gap:6,alignItems:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:muted,textTransform:"uppercase"}}>Team avg</div>
+              {[["fatigue"],["sleepQuality"],["appetite"],["soreness"]].map(function(pair){
+                return (
+                  <div key={pair[0]} style={{textAlign:"center"}}>
+                    <div style={{fontSize:14,fontWeight:800,color:navy}}>{zStats[pair[0]].mean.toFixed(1)}</div>
+                    <div style={{fontSize:9,color:muted,marginTop:1}}>avg / 5</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* ROSTER */}
       {tab==="roster"&&<RosterManager players={players} onUpdate={onPlayersUpdate}/>}
     </div>
   );
@@ -793,10 +899,29 @@ function Dashboard(props){
 
 // ── APP ───────────────────────────────────────────────────
 function App(){
-  var vs=useState("player"); var view=vs[0],setView=vs[1];
-  var us=useState(false); var unlocked=us[0],setUnlocked=us[1];
-  var subS=useState(function(){return loadTodaySubs();}); var subs=subS[0],setSubs=subS[1];
-  var pls=useState(function(){return loadLS(PLAYERS_KEY,DEFAULT_PLAYERS);}); var players=pls[0],setPlayers=pls[1];
+  var vs=useState("player");var view=vs[0],setView=vs[1];
+  var us=useState(false);var unlocked=us[0],setUnlocked=us[1];
+  var subS=useState(function(){return loadTodaySubs();});var subs=subS[0],setSubs=subS[1];
+  var pls=useState(function(){return loadLS(PLAYERS_KEY,DEFAULT_PLAYERS);});var players=pls[0],setPlayers=pls[1];
+  var loadingS=useState(false);var loading=loadingS[0],setLoading=loadingS[1];
+  var lastFetchS=useState(null);var lastFetch=lastFetchS[0],setLastFetch=lastFetchS[1];
+
+  function fetchFromSheet(){
+    if(!SHEET_URL) return;
+    setLoading(true);
+    fetch(SHEET_URL,{method:"GET"})
+      .then(function(r){return r.json();})
+      .then(function(rows){
+        if(rows&&rows.length){
+          var parsed=parseSheetSubs(rows);
+          setSubs(parsed);
+          saveLS(SUBS_KEY,parsed);
+        }
+        setLastFetch(nowTime());
+        setLoading(false);
+      })
+      .catch(function(){setLoading(false);});
+  }
 
   function handleSubmit(f){
     var sub=Object.assign({},f,{date:todayDate(),timestamp:nowTime()});
@@ -856,7 +981,8 @@ function App(){
           ? <PlayerFlow players={players} subs={subs} onSubmit={handleSubmit}/>
           : (unlocked
               ? <Dashboard subs={subs} players={players} onExport={exportCSV}
-                  onPlayersUpdate={setPlayers} onClearDay={clearDay}/>
+                  onPlayersUpdate={setPlayers} onClearDay={clearDay}
+                  fetchFromSheet={fetchFromSheet} loading={loading} lastFetch={lastFetch}/>
               : <PinScreen onUnlock={function(){setUnlocked(true);}}/>)
         }
       </div>
