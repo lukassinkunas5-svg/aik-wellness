@@ -909,18 +909,27 @@ function App(){
   function fetchFromSheet(){
     if(!SHEET_URL) return;
     setLoading(true);
-    fetch(SHEET_URL,{method:"GET"})
-      .then(function(r){return r.json();})
-      .then(function(rows){
+    fetch(SHEET_URL,{method:"GET",redirect:"follow"})
+      .then(function(r){
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        return r.text();
+      })
+      .then(function(text){
+        var rows=JSON.parse(text);
         if(rows&&rows.length){
           var parsed=parseSheetSubs(rows);
           setSubs(parsed);
           saveLS(SUBS_KEY,parsed);
+        } else {
+          setSubs([]);
         }
         setLastFetch(nowTime());
         setLoading(false);
       })
-      .catch(function(){setLoading(false);});
+      .catch(function(err){
+        console.error("Fetch error:",err);
+        setLoading(false);
+      });
   }
 
   function handleSubmit(f){
