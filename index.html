@@ -58,8 +58,29 @@ function todayDate(){
   var yyyy=d.getFullYear();
   return dd+"/"+mm+"/"+yyyy;
 }
+function todayDateKey(){
+  var d=new Date();
+  var dd=String(d.getDate()).padStart(2,"0");
+  var mm=String(d.getMonth()+1).padStart(2,"0");
+  var yyyy=d.getFullYear();
+  return yyyy+"-"+mm+"-"+dd;
+}
+function displayDateFromKey(key){
+  if(!key) return "";
+  var s=String(key).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+    return s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4);
+  }
+  return s;
+}
 function nowTime(){
   return new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+}
+function apiGetUrl(){
+  var sep=SHEET_URL.indexOf("?")>=0?"&":"?";
+  return SHEET_URL+sep+"date="+encodeURIComponent(todayDate())+
+    "&date_key="+encodeURIComponent(todayDateKey())+
+    "&_ts="+encodeURIComponent(String(Date.now()));
 }
 
 // ── LOCAL STORAGE ─────────────────────────────────────────
@@ -76,10 +97,21 @@ function loadTodaySubs(){
     if(!stored) return [];
     var parsed=JSON.parse(stored);
     if(!parsed.length) return [];
-    if(!parsed[0].date||parsed[0].date!==todayDate()){
+
+    var first=parsed[0]||{};
+    var storedDateKey=first.date_key||"";
+    var storedDate=first.date||"";
+
+    if(storedDateKey){
+      if(storedDateKey!==todayDateKey()){
+        localStorage.removeItem(SUBS_KEY);
+        return [];
+      }
+    } else if(!storedDate || storedDate!==todayDate()){
       localStorage.removeItem(SUBS_KEY);
       return [];
     }
+
     return parsed;
   }catch(e){
     localStorage.removeItem(SUBS_KEY);
@@ -93,38 +125,105 @@ function sendToSheet(sub){
   var pd=sub.painData||{};
   var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
   fetch(SHEET_URL,{
-    method:"POST",mode:"no-cors",
+    method:"POST",
+    mode:"no-cors",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
-      date:sub.date, player:sub.player, timestamp:sub.timestamp,
-      fatigue:sub.fatigue, sleepQuality:sub.sleepQuality, hoursSlept:sub.hoursSlept||"",
-      appetite:sub.appetite, soreness:sub.soreness,
-      pain:pd.hasPain?"Yes":"No", painSide:pd.side||"",
-      painAreas:areas, painType:(pd.painType||[]).join("; "),
-      illness:pd.illness?"Yes":"No", illnessTypes:(pd.illnessTypes||[]).join("; "),
-      readyToTrain:sub.readyToTrain, comments:sub.comments||""
+      // old schema, kept for your current Apps Script / Sheet
+      date:sub.date||todayDate(),
+      player:sub.player||"",
+      timestamp:sub.timestamp||nowTime(),
+
+      // new schema, useful later for Python GPS integration
+      date_key:sub.date_key||todayDateKey(),
+      date_display:sub.date_display||sub.date||todayDate(),
+      timestamp_iso:sub.timestamp_iso||new Date().toISOString(),
+      time_display:sub.time_display||sub.timestamp||nowTime(),
+      athlete_id:sub.athlete_id||"",
+
+      fatigue:sub.fatigue,
+      sleepQuality:sub.sleepQuality,
+      hoursSlept:sub.hoursSlept||"",
+      appetite:sub.appetite,
+      soreness:sub.soreness,
+      pain:pd.hasPain?"Yes":"No",
+      painSide:pd.side||"",
+      painAreas:areas,
+      painType:(pd.painType||[]).join("; "),
+      illness:pd.illness?"Yes":"No",
+      illnessTypes:(pd.illnessTypes||[]).join("; "),
+      readyToTrain:sub.readyToTrain,
+      comments:sub.comments||""
     })
-  }).catch(function(){});
+  }).catch(function(err){
+    console.error("POST failed:",err);
+  });
 }
 
+function getField(r,keys,def){
+  for(var i=0;i<keys.length;i++){
+    var k=keys[i];
+    if(Object.prototype.hasOwnProperty.call(r,k) && r[k]!==null && r[k]!==undefined && r[k]!==""){
+      return r[k];
+    }
+  }
+  return def!==undefined?def:"";
+}
+function yesField(v){
+  var s=String(v||"").toLowerCase().trim();
+  return s==="yes"||s==="true"||s==="1";
+}
+function splitList(v){
+  if(!v) return [];
+  return String(v).split(";").map(function(x){return x.trim();}).filter(function(x){return x;});
+}
+function numberField(v){
+  var n=Number(v);
+  return isNaN(n)?null:n;
+}
 function parseSheetSubs(rows){
+  if(!Array.isArray(rows)) return [];
+
   return rows.map(function(r){
+    var painAreas=getField(r,["painAreas","Pain Areas"],"");
+    var painType=getField(r,["painType","Pain Type"],"");
+    var illnessTypes=getField(r,["illnessTypes","Illness Types"],"");
+
+    var dateDisplay=getField(r,["date_display","Date","date"],"");
+    var dateKey=getField(r,["date_key"],"");
+
+    if(!dateDisplay && dateKey){
+      dateDisplay=displayDateFromKey(dateKey);
+    }
+
     var pd={
-      hasPain:r["Pain"]==="Yes",
-      side:r["Pain Side"]||null,
-      muscles:r["Pain Areas"]?r["Pain Areas"].split("; ").filter(function(x){return x;}):[],
+      hasPain:yesField(getField(r,["pain","Pain"],"No")),
+      side:getField(r,["painSide","Pain Side"],"")||null,
+      muscles:splitList(painAreas),
       central:[],
-      painType:r["Pain Type"]?r["Pain Type"].split("; ").filter(function(x){return x;}):[],
-      illness:r["Illness"]==="Yes",
-      illnessTypes:r["Illness Types"]?r["Illness Types"].split("; ").filter(function(x){return x;}):[]
+      painType:splitList(painType),
+      illness:yesField(getField(r,["illness","Illness"],"No")),
+      illnessTypes:splitList(illnessTypes)
     };
+
     return {
-      date:r["Date"], player:r["Player"], timestamp:r["Time"],
-      fatigue:Number(r["Fatigue"]), sleepQuality:Number(r["Sleep Quality"]),
-      hoursSlept:r["Hours Slept"]||"", appetite:Number(r["Appetite"]),
-      soreness:Number(r["Soreness"]), readyToTrain:r["Ready"],
-      comments:r["Comments"]||"", painData:pd
+      date:dateDisplay||todayDate(),
+      date_key:dateKey||todayDateKey(),
+      athlete_id:getField(r,["athlete_id","Athlete ID"],""),
+      player:getField(r,["player","Player"],""),
+      timestamp:getField(r,["time_display","Time","timestamp"],""),
+      timestamp_iso:getField(r,["timestamp_iso"],""),
+      fatigue:numberField(getField(r,["fatigue","Fatigue"],"")),
+      sleepQuality:numberField(getField(r,["sleepQuality","Sleep Quality"],"")),
+      hoursSlept:getField(r,["hoursSlept","Hours Slept"],""),
+      appetite:numberField(getField(r,["appetite","Appetite"],"")),
+      soreness:numberField(getField(r,["soreness","Soreness"],"")),
+      readyToTrain:getField(r,["readyToTrain","Ready"],""),
+      comments:getField(r,["comments","Comments"],""),
+      painData:pd
     };
+  }).filter(function(s){
+    return s.player;
   });
 }
 
@@ -946,31 +1045,60 @@ function App(){
   function fetchFromSheet(){
     if(!SHEET_URL) return;
     setLoading(true);
-    fetch(SHEET_URL,{method:"GET",redirect:"follow"})
+
+    fetch(apiGetUrl(),{method:"GET",redirect:"follow",cache:"no-store"})
       .then(function(r){
         if(!r.ok) throw new Error("HTTP "+r.status);
         return r.text();
       })
       .then(function(text){
-        var rows=JSON.parse(text);
-        if(rows&&rows.length){
-          var parsed=parseSheetSubs(rows);
-          setSubs(parsed);
-          saveLS(SUBS_KEY,parsed);
-        } else {
-          setSubs([]);
+        text=(text||"").trim();
+
+        if(!text){
+          throw new Error("Empty response from Apps Script");
         }
+
+        if(text.charAt(0)==="<"){
+          throw new Error("Apps Script returned HTML instead of JSON. Check deployment access.");
+        }
+
+        var rows=JSON.parse(text);
+
+        if(rows && rows.ok===false){
+          throw new Error(rows.error||"Apps Script returned ok:false");
+        }
+
+        if(rows && Array.isArray(rows.data)){
+          rows=rows.data;
+        }
+
+        if(!Array.isArray(rows)){
+          throw new Error("Expected JSON array from Apps Script");
+        }
+
+        var parsed=parseSheetSubs(rows);
+        setSubs(parsed);
+        saveLS(SUBS_KEY,parsed);
         setLastFetch(nowTime());
         setLoading(false);
       })
       .catch(function(err){
         console.error("Fetch error:",err);
         setLoading(false);
+        alert("Could not refresh from Google Sheets:\n\n"+err.message);
       });
   }
 
   function handleSubmit(f){
-    var sub=Object.assign({},f,{date:todayDate(),timestamp:nowTime()});
+    var sub=Object.assign({},f,{
+      date:todayDate(),
+      date_key:todayDateKey(),
+      date_display:todayDate(),
+      timestamp:nowTime(),
+      time_display:nowTime(),
+      timestamp_iso:new Date().toISOString()
+    });
+
     var updated=subs.filter(function(s){return s.player!==f.player;}).concat([sub]);
     setSubs(updated);
     saveLS(SUBS_KEY,updated);
