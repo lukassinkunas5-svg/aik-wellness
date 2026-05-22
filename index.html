@@ -25,6 +25,9 @@ var useState = React.useState;
 // ── CONFIG ────────────────────────────────────────────────
 var PIN        = "1234";
 var SHEET_URL  = "https://script.google.com/macros/s/AKfycbxrdFNChgE1qdk-KDpnuUqvZwqxLr7PBByFFH57OhBGRJdGuEDqKeMybX2XDqPVJw08Rw/exec";
+// This must match SECRET_TOKEN in Google Apps Script.
+// Important: anything in GitHub Pages is visible to users, so treat this as lightweight protection only.
+var PUBLIC_FORM_TOKEN = "lpSvgJqj03rHZvRk5Ys3Ff6yWEYQsQh3";
 var PLAYERS_KEY = "aik-wellness-players";
 var SUBS_KEY    = "aik-wellness-subs";
 
@@ -78,7 +81,9 @@ function nowTime(){
 }
 function apiGetUrl(){
   var sep=SHEET_URL.indexOf("?")>=0?"&":"?";
-  return SHEET_URL+sep+"date="+encodeURIComponent(todayDate())+
+  return SHEET_URL+sep+
+    "token="+encodeURIComponent(PUBLIC_FORM_TOKEN)+
+    "&date="+encodeURIComponent(todayDate())+
     "&date_key="+encodeURIComponent(todayDateKey())+
     "&_ts="+encodeURIComponent(String(Date.now()));
 }
@@ -124,7 +129,9 @@ function sendToSheet(sub){
   if(!SHEET_URL) return;
   var pd=sub.painData||{};
   var areas=(pd.muscles||[]).concat(pd.central||[]).join("; ");
-  fetch(SHEET_URL,{
+  var sep=SHEET_URL.indexOf("?")>=0?"&":"?";
+  var postUrl=SHEET_URL+sep+"token="+encodeURIComponent(PUBLIC_FORM_TOKEN);
+  fetch(postUrl,{
     method:"POST",
     mode:"no-cors",
     headers:{"Content-Type":"application/json"},
