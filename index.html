@@ -30,6 +30,7 @@ var SHEET_URL  = "https://script.google.com/macros/s/AKfycbxrdFNChgE1qdk-KDpnuUq
 var PUBLIC_FORM_TOKEN = "lpSvgJqj03rHZvRk5Ys3Ff6yWEYQsQh3";
 var PLAYERS_KEY = "aik-wellness-players";
 var SUBS_KEY    = "aik-wellness-subs";
+var ROSTER_CACHE_KEY = "aik-wellness-roster-cache";
 
 var DEFAULT_PLAYERS = [
   "Abdihakim Ali","Adrian Helm","Ahmad Faqa","Amel Mujanic","Andreas Redkin",
@@ -85,6 +86,13 @@ function apiGetUrl(){
     "token="+encodeURIComponent(PUBLIC_FORM_TOKEN)+
     "&date="+encodeURIComponent(todayDate())+
     "&date_key="+encodeURIComponent(todayDateKey())+
+    "&_ts="+encodeURIComponent(String(Date.now()));
+}
+function apiRosterUrl(){
+  var sep=SHEET_URL.indexOf("?")>=0?"&":"?";
+  return SHEET_URL+sep+
+    "token="+encodeURIComponent(PUBLIC_FORM_TOKEN)+
+    "&type=roster"+
     "&_ts="+encodeURIComponent(String(Date.now()));
 }
 
@@ -687,28 +695,32 @@ function PinScreen(props){
 
 // ── ROSTER MANAGER ────────────────────────────────────────
 function RosterManager(props){
-  var players=props.players,onUpdate=props.onUpdate;
-  var ns=useState("");var newName=ns[0],setNewName=ns[1];
+  // Roster is now sourced from the Roster tab in the Wellness Google Sheet.
+  // This view is read-only — to add/remove/rename players or change athlete IDs,
+  // edit the Roster tab directly. The web app picks up changes on next load.
+  var players=props.players||[];
+  var byName=props.byName||{};
+  var onRefresh=props.onRefresh;
   var ss=useState("");var search=ss[0],setSearch=ss[1];
-  var cs=useState(null);var confirm=cs[0],setConfirm=cs[1];
   var sorted=players.slice().sort(function(a,b){return a.split(" ").pop().localeCompare(b.split(" ").pop());});
   var filtered=sorted.filter(function(p){return p.toLowerCase().indexOf(search.toLowerCase())>=0;});
-  function save(u){saveLS(PLAYERS_KEY,u);onUpdate(u);}
-  function add(){var n=newName.trim();if(!n||players.indexOf(n)>=0)return;save(players.concat([n]));setNewName("");}
-  function remove(name){save(players.filter(function(p){return p!==name;}));setConfirm(null);}
+
   return (
     <div>
-      <div style={{background:white,borderRadius:16,padding:18,marginBottom:12,
-        boxShadow:"0 1px 6px rgba(15,31,61,0.07)"}}>
-        <div style={{fontFamily:DISP,fontSize:14,fontWeight:600,color:navy,letterSpacing:1,marginBottom:12}}>ADD PLAYER</div>
-        <div style={{display:"flex",gap:8}}>
-          <input value={newName} onChange={function(e){setNewName(e.target.value);}}
-            onKeyDown={function(e){if(e.key==="Enter")add();}} placeholder="Full name..."
-            style={{flex:1,padding:"11px 14px",borderRadius:10,border:"1.5px solid "+border,
-              fontSize:14,color:navy,background:faint,outline:"none"}}/>
-          <button onClick={add} style={{padding:"11px 18px",background:navy,color:yellow,
-            border:"none",borderRadius:10,fontFamily:DISP,fontSize:14,fontWeight:700,cursor:"pointer"}}>ADD</button>
+      <div style={{background:navy+"10",borderRadius:14,padding:"14px 16px",marginBottom:12,
+        border:"1px solid "+navy+"25"}}>
+        <div style={{fontSize:13,color:navy,fontWeight:700,marginBottom:4}}>Roster is read-only</div>
+        <div style={{fontSize:12,color:muted,lineHeight:1.55}}>
+          To add or remove players, edit the <strong>Roster</strong> tab in the Wellness Google Sheet.
+          Set <strong>Active</strong> to <code>No</code> to hide a player from the dropdown without losing their athlete ID.
+          {onRefresh&&" Tap Refresh below to pull the latest."}
         </div>
+        {onRefresh&&(
+          <button onClick={onRefresh} style={{marginTop:10,padding:"8px 14px",background:navy,color:yellow,
+            border:"none",borderRadius:10,fontFamily:DISP,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            ⟳ Refresh roster
+          </button>
+        )}
       </div>
       <div style={{background:white,borderRadius:16,padding:18,boxShadow:"0 1px 6px rgba(15,31,61,0.07)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -718,21 +730,14 @@ function RosterManager(props){
               fontSize:13,color:navy,background:faint,outline:"none",width:120}}/>
         </div>
         {filtered.map(function(p){
+          var id=byName[p]||"";
+          var shortId=id?id.slice(0,8)+"…":"—";
           return (
             <div key={p} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
               padding:"11px 12px",borderRadius:10,background:faint,
-              border:"1px solid "+(confirm===p?red:border),marginBottom:6}}>
+              border:"1px solid "+border,marginBottom:6}}>
               <span style={{fontSize:14,color:navy,fontWeight:500}}>{p}</span>
-              {confirm===p?(
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  <span style={{fontSize:12,color:red,fontWeight:600}}>Remove?</span>
-                  <button onClick={function(){remove(p);}} style={{padding:"5px 12px",background:red,color:white,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>Yes</button>
-                  <button onClick={function(){setConfirm(null);}} style={{padding:"5px 12px",background:border,color:muted,border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>No</button>
-                </div>
-              ):(
-                <button onClick={function(){setConfirm(p);}} style={{padding:"5px 12px",background:"transparent",
-                  color:muted,border:"1px solid "+border,borderRadius:6,fontSize:12,cursor:"pointer"}}>Remove</button>
-              )}
+              <span style={{fontSize:11,color:muted,fontFamily:"monospace"}} title={id}>{shortId}</span>
             </div>
           );
         })}
@@ -1035,7 +1040,7 @@ function Dashboard(props){
       )}
 
       {/* ROSTER */}
-      {tab==="roster"&&<RosterManager players={players} onUpdate={onPlayersUpdate}/>}
+      {tab==="roster"&&<RosterManager players={players} byName={props.rosterByName||{}} onRefresh={props.onRefreshRoster}/>}
     </div>
   );
 }
@@ -1045,9 +1050,65 @@ function App(){
   var vs=useState("player");var view=vs[0],setView=vs[1];
   var us=useState(false);var unlocked=us[0],setUnlocked=us[1];
   var subS=useState(function(){return loadTodaySubs();});var subs=subS[0],setSubs=subS[1];
-  var pls=useState(function(){return loadLS(PLAYERS_KEY,DEFAULT_PLAYERS);});var players=pls[0],setPlayers=pls[1];
+
+  // Roster state. Loaded from the Roster tab via Apps Script.
+  // Shape: { list: ["Name 1", "Name 2", ...], byName: { "Name 1": "athlete-id-1", ... } }
+  function buildRoster(rosterArr){
+    var list=[];var byName={};
+    (rosterArr||[]).forEach(function(p){
+      if(!p||!p.player) return;
+      list.push(p.player);
+      byName[p.player]=p.athlete_id||"";
+    });
+    return {list:list,byName:byName};
+  }
+  function defaultRoster(){
+    // Used only as a fallback if the Roster fetch fails.
+    return buildRoster(DEFAULT_PLAYERS.map(function(n){return {player:n,athlete_id:""};}));
+  }
+  function loadCachedRoster(){
+    try{
+      var cached=loadLS(ROSTER_CACHE_KEY,null);
+      if(cached&&Array.isArray(cached.list)&&cached.list.length){
+        return cached;
+      }
+    }catch(e){}
+    return defaultRoster();
+  }
+  var rS=useState(loadCachedRoster);var roster=rS[0],setRoster=rS[1];
+  var players=roster.list;
+  function setPlayers(arr){
+    // Legacy local-only update path (kept so RosterManager still compiles).
+    var next=buildRoster(arr.map(function(n){return {player:n,athlete_id:roster.byName[n]||""};}));
+    setRoster(next);
+  }
+
   var loadingS=useState(false);var loading=loadingS[0],setLoading=loadingS[1];
   var lastFetchS=useState(null);var lastFetch=lastFetchS[0],setLastFetch=lastFetchS[1];
+
+  function fetchRoster(){
+    if(!SHEET_URL) return;
+    fetch(apiRosterUrl(),{method:"GET",redirect:"follow",cache:"no-store"})
+      .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status);return r.text();})
+      .then(function(text){
+        text=(text||"").trim();
+        if(!text||text.charAt(0)==="<") throw new Error("Roster: bad response");
+        var data=JSON.parse(text);
+        if(data&&data.ok===false) throw new Error(data.error||"Roster: ok:false");
+        if(!Array.isArray(data)) throw new Error("Roster: expected array");
+        var next=buildRoster(data);
+        if(next.list.length){
+          setRoster(next);
+          saveLS(ROSTER_CACHE_KEY,next);
+        }
+      })
+      .catch(function(err){
+        console.warn("Roster fetch failed, using fallback:",err.message);
+      });
+  }
+
+  // Fetch the roster once on mount.
+  React.useEffect(function(){fetchRoster();},[]);
 
   function fetchFromSheet(){
     if(!SHEET_URL) return;
@@ -1103,7 +1164,8 @@ function App(){
       date_display:todayDate(),
       timestamp:nowTime(),
       time_display:nowTime(),
-      timestamp_iso:new Date().toISOString()
+      timestamp_iso:new Date().toISOString(),
+      athlete_id:(roster.byName&&roster.byName[f.player])||""
     });
 
     var updated=subs.filter(function(s){return s.player!==f.player;}).concat([sub]);
@@ -1163,6 +1225,7 @@ function App(){
           : (unlocked
               ? <Dashboard subs={subs} players={players} onExport={exportCSV}
                   onPlayersUpdate={setPlayers} onClearDay={clearDay}
+                  rosterByName={roster.byName} onRefreshRoster={fetchRoster}
                   fetchFromSheet={fetchFromSheet} loading={loading} lastFetch={lastFetch}/>
               : <PinScreen onUnlock={function(){setUnlocked(true);}}/>)
         }
